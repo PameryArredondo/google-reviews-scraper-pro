@@ -129,7 +129,21 @@ def to_excel(df):
     buf.seek(0)
     return buf
 
-def check_scraper_version():
+def get_last_scrape_time(db_path):
+    """Get the most recent scrape session end time from the database."""
+    try:
+        con = sqlite3.connect(db_path)
+        cur = con.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='scrape_sessions'")
+        if not cur.fetchone():
+            con.close()
+            return None
+        cur.execute("SELECT MAX(end_time) FROM scrape_sessions")
+        row = cur.fetchone()
+        con.close()
+        return row[0] if row else None
+    except Exception:
+        return None
     """Returns (is_outdated, latest_version) or (None, None) on failure."""
     try:
         r = requests.get(
@@ -189,6 +203,20 @@ try:
     with st.expander("Preview data", expanded=True):
         st.dataframe(df, use_container_width=True)
 
+    # Last scrape time
+    last_scrape = get_last_scrape_time(DB_PATH)
+    if last_scrape:
+        try:
+            dt = datetime.fromisoformat(last_scrape.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = pytz.utc.localize(dt)
+            dt_est = dt.astimezone(EST)
+            st.caption(f"📅 Last scraped: {dt_est.strftime('%d/%m/%Y at %I:%M %p')} EST")
+        except Exception:
+            st.caption(f"📅 Last scraped: {last_scrape}")
+    else:
+        st.caption("📅 Last scraped: unknown")
+
     # Date filter
     st.divider()
     st.subheader("Filter by Date Range")
@@ -227,7 +255,7 @@ try:
     else:
         col_from, col_to = st.columns(2)
         date_from = col_from.date_input("From", value=df["_date"].min().date(), min_value=df["_date"].min().date(), max_value=df["_date"].max().date())
-        date_to   = col_to.date_input("To",   value=df["_date"].max().date(), min_value=df["_date"].min().date(), max_value=df["_date"].max().date())
+        date_to   = col_to.date_input("To", value=df["_date"].max().date(), min_value=df["_date"].min().date(), max_value=df["_date"].max().date())
         filtered = df[(df["_date"].dt.date >= date_from) & (df["_date"].dt.date <= date_to)]
         fname_tag = f"{date_from.strftime('%d%m%Y')}_to_{date_to.strftime('%d%m%Y')}"
 
