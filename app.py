@@ -146,7 +146,6 @@ def check_scraper_version():
 # ── UI ──────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Google Reviews Export", page_icon="⭐", layout="centered")
 st.title("⭐ Google Reviews Export")
-st.caption("Reads from the local scraper database and exports to Excel.")
 
 # Version check
 is_outdated, latest = check_scraper_version()
