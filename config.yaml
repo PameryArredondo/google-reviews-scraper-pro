@@ -1,0 +1,22 @@
+backup_to_json: true
+convert_dates: true
+db_path: reviews.db
+download_images: false
+headless: true
+json_path: google_reviews.json
+log_level: INFO
+max_reviews: 0
+max_scroll_attempts: 100
+preserve_original_urls: true
+scrape_mode: update
+scroll_idle_limit: 30
+sort_by: newest
+stop_threshold: 0
+store_local_paths: true
+use_mongodb: false
+
+businesses:
+  - url: "https://www.google.com/maps/place/Validated+Claim+Support/@40.8725539,-74.0086251,17z/data=!3m1!4b1!4m6!3m5!1s0x89c2f70e34150509:0x8e0802c97d8f73cc!8m2!3d40.8725539!4d-74.0060502!16s%2Fg%2F11fn1rmh8n?entry=ttu&g_ep=EgoyMDI2MDMwOS4wIKXMDSoASAFQAw%3D%3D"
+    custom_params:
+      company: "Validated Claim Support"
+      source: "Google Maps"
