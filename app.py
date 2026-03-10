@@ -63,13 +63,13 @@ def load_reviews(db_path):
     cur.execute("PRAGMA table_info(reviews)")
     cols = {row[1] for row in cur.fetchall()}
 
-    text_col        = "text"          if "text"          in cols else "description"
-    owner_text_col  = "owner_reply"   if "owner_reply"   in cols else "owner_responses"
-    owner_date_col  = "owner_reply_date" if "owner_reply_date" in cols else "owner_response_date"
-    rating_col      = "stars"         if "stars"         in cols else "rating"
-    date_col        = "date"          if "date"          in cols else "review_date"
-    deleted_col     = "is_deleted"    if "is_deleted"    in cols else None
-    params_col      = "custom_params" if "custom_params" in cols else None
+    text_col        = "review_text"     if "review_text"     in cols else "description"
+    owner_text_col  = "owner_responses" if "owner_responses" in cols else "owner_reply"
+    owner_date_col  = "last_modified"   if "last_modified"   in cols else "owner_response_date"
+    rating_col      = "rating"          if "rating"          in cols else "stars"
+    date_col        = "review_date"     if "review_date"     in cols else "date"
+    deleted_col     = "is_deleted"      if "is_deleted"      in cols else None
+    params_col      = "custom_params"   if "custom_params"   in cols else None
 
     where = f"WHERE r.{deleted_col} = 0" if deleted_col else ""
 
