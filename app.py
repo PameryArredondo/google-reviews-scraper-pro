@@ -188,24 +188,12 @@ try:
     with st.expander("Preview data", expanded=True):
         st.dataframe(df, use_container_width=True)
 
-    # Rating filter
-    st.divider()
-    min_rating = st.slider("Filter by minimum rating", 1, 5, 1)
-    filtered = df[df["review_rating"] >= min_rating]
-
-    # Filtered metrics
-    f_avg = filtered["review_rating"].mean() if len(filtered) else 0
-    f_has_owner = (filtered["owner_answer"].notna() & (filtered["owner_answer"] != "")).sum()
-    fc1, fc2, fc3 = st.columns(3)
-    fc1.metric("Filtered Reviews", len(filtered), delta=f"{len(filtered)-len(df)} from total")
-    fc2.metric("Filtered Avg Rating", f"{f_avg:.2f} ⭐")
-    fc3.metric("Filtered Owner Responses", f_has_owner)
-
     # Download
+    st.divider()
     filename = f"google_reviews_{datetime.now().strftime('%Y%m%d')}.xlsx"
     st.download_button(
         label="⬇️ Download Excel",
-        data=to_excel(filtered),
+        data=to_excel(df),
         file_name=filename,
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
