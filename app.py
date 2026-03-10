@@ -9,13 +9,13 @@ import requests
 import subprocess
 from packaging.version import Version
 
-DB_PATH = "reviews.db" 
-LOCAL_VERSION = "1.2.1"
+DB_PATH = "reviews.db"  # adjust path if needed
+LOCAL_VERSION = "1.2.1"  # update this when you git pull
 GITHUB_REPO  = "georgekhananaev/google-reviews-scraper-pro"
 EST = pytz.timezone("America/New_York")
 
 def to_est_date(utc_str):
-    """Convert UTC string to EST date only (no time)."""
+    """Convert UTC ISO string to EST date only (no time)."""
     if not utc_str:
         return None
     try:
@@ -27,7 +27,7 @@ def to_est_date(utc_str):
         return None
 
 def to_utc_str(utc_str):
-    "Normalize UTC string."
+    """Normalize UTC ISO string."""
     if not utc_str:
         return None
     try:
@@ -39,6 +39,7 @@ def to_utc_str(utc_str):
         return utc_str
 
 def extract_text(field, lang="en"):
+    """Extract text from JSON description/owner_responses field."""
     if not field:
         return None
     try:
