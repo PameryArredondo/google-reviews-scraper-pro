@@ -9,13 +9,13 @@ import requests
 import subprocess
 from packaging.version import Version
 
-DB_PATH = "reviews.db"
-LOCAL_VERSION = "1.2.1" 
+DB_PATH = "reviews.db"  # adjust path if needed
+LOCAL_VERSION = "1.2.1"  # update this when you git pull
 GITHUB_REPO  = "georgekhananaev/google-reviews-scraper-pro"
 EST = pytz.timezone("America/New_York")
 
 def to_est_date(utc_str):
-    """Convert UTC string to EST date only (no time)."""
+    """Convert UTC ISO string to EST date only (no time)."""
     if not utc_str:
         return None
     try:
@@ -27,7 +27,7 @@ def to_est_date(utc_str):
         return None
 
 def to_utc_str(utc_str):
-    """Normalize UTC string."""
+    """Normalize UTC ISO string."""
     if not utc_str:
         return None
     try:
@@ -59,21 +59,34 @@ def load_reviews(db_path):
     con = sqlite3.connect(db_path)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
-    cur.execute("""
+    # Discover actual column names
+    cur.execute("PRAGMA table_info(reviews)")
+    cols = {row[1] for row in cur.fetchall()}
+
+    text_col        = "text"          if "text"          in cols else "description"
+    owner_text_col  = "owner_reply"   if "owner_reply"   in cols else "owner_responses"
+    owner_date_col  = "owner_reply_date" if "owner_reply_date" in cols else "owner_response_date"
+    rating_col      = "stars"         if "stars"         in cols else "rating"
+    date_col        = "date"          if "date"          in cols else "review_date"
+    deleted_col     = "is_deleted"    if "is_deleted"    in cols else None
+    params_col      = "custom_params" if "custom_params" in cols else None
+
+    where = f"WHERE r.{deleted_col} = 0" if deleted_col else ""
+
+    cur.execute(f"""
         SELECT
             r.author,
-            r.description,
-            r.owner_responses,
-            r.owner_response_date,
-            r.rating,
-            r.review_date,
-            r.is_deleted,
-            p.name AS place_name,
-            r.custom_params
+            r.{text_col}        AS description,
+            r.{owner_text_col}  AS owner_responses,
+            r.{owner_date_col}  AS owner_response_date,
+            r.{rating_col}      AS rating,
+            r.{date_col}        AS review_date,
+            p.name              AS place_name,
+            {'r.' + params_col + ' AS custom_params' if params_col else 'NULL AS custom_params'}
         FROM reviews r
         LEFT JOIN places p ON r.place_id = p.place_id
-        WHERE r.is_deleted = 0
-        ORDER BY r.review_date DESC
+        {where}
+        ORDER BY r.{date_col} DESC
     """)
     rows = cur.fetchall()
     con.close()
@@ -141,12 +154,12 @@ st.caption("Reads from the local scraper database and exports to Excel.")
 is_outdated, latest = check_scraper_version()
 if is_outdated:
     st.warning(
-        f"Scraper update available (v{latest}). "
+        f"⚠️ Scraper update available (v{latest}). "
         f"Update before your next scrape to stay current.",
         icon="⚠️"
     )
     st.link_button(
-        "Download Latest Version",
+        "⬇️ Download Latest Version",
         f"https://github.com/{GITHUB_REPO}/releases/latest"
     )
 elif is_outdated is None:
