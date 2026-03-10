@@ -189,50 +189,54 @@ try:
     with st.expander("Preview data", expanded=True):
         st.dataframe(df, use_container_width=True)
 
-    # Last sync date
-    last_sync = df["_date"].max().date()
-    st.caption(f"📅 Last review sync: {last_sync.strftime('%d/%m/%Y')}")
-
     # Date filter
     st.divider()
     st.subheader("Filter by Date Range")
 
-    # Build available years and quarters from data
     df["_year"] = df["_date"].dt.year
     df["_quarter"] = df["_date"].dt.quarter
     available = df[["_year", "_quarter"]].dropna().drop_duplicates()
     available_years = sorted(available["_year"].unique(), reverse=True)
 
-    col_y, col_q = st.columns(2)
-    selected_year = col_y.selectbox("Year", ["All"] + [int(y) for y in available_years])
+    filter_mode = st.radio("Filter by", ["Quarter", "Custom date range"], horizontal=True)
 
-    if selected_year == "All":
-        available_quarters = sorted(available["_quarter"].unique())
+    if filter_mode == "Quarter":
+        col_y, col_q = st.columns(2)
+        selected_year = col_y.selectbox("Year", ["All"] + [int(y) for y in available_years])
+
+        if selected_year == "All":
+            available_quarters = sorted(available["_quarter"].unique())
+        else:
+            available_quarters = sorted(available[available["_year"] == selected_year]["_quarter"].unique())
+
+        quarter_names = {1: "Q1 (Jan-Mar)", 2: "Q2 (Apr-Jun)", 3: "Q3 (Jul-Sep)", 4: "Q4 (Oct-Dec)"}
+        selected_q = col_q.selectbox("Quarter", ["All"] + [quarter_names[q] for q in available_quarters])
+
+        q_map = {v: k for k, v in quarter_names.items()}
+        if selected_year == "All" and selected_q == "All":
+            filtered = df.copy()
+        elif selected_year == "All":
+            filtered = df[df["_quarter"] == q_map[selected_q]]
+        elif selected_q == "All":
+            filtered = df[df["_year"] == selected_year]
+        else:
+            filtered = df[(df["_year"] == selected_year) & (df["_quarter"] == q_map[selected_q])]
+
+        fname_tag = f"{selected_year}_{selected_q}".replace(" ", "_").replace("(", "").replace(")", "").replace("-", "")
+
     else:
-        available_quarters = sorted(available[available["_year"] == selected_year]["_quarter"].unique())
-
-    quarter_names = {1: "Q1 (Jan-Mar)", 2: "Q2 (Apr-Jun)", 3: "Q3 (Jul-Sep)", 4: "Q4 (Oct-Dec)"}
-    selected_q = col_q.selectbox("Quarter", ["All"] + [quarter_names[q] for q in available_quarters])
-
-    # Determine date range from selection
-    q_map = {v: k for k, v in quarter_names.items()}
-    if selected_year == "All" and selected_q == "All":
-        filtered = df.copy()
-    elif selected_year == "All":
-        q = q_map[selected_q]
-        filtered = df[df["_quarter"] == q]
-    elif selected_q == "All":
-        filtered = df[df["_year"] == selected_year]
-    else:
-        q = q_map[selected_q]
-        filtered = df[(df["_year"] == selected_year) & (df["_quarter"] == q)]
+        col_from, col_to = st.columns(2)
+        date_from = col_from.date_input("From", value=df["_date"].min().date(), min_value=df["_date"].min().date(), max_value=df["_date"].max().date())
+        date_to   = col_to.date_input("To",   value=df["_date"].max().date(), min_value=df["_date"].min().date(), max_value=df["_date"].max().date())
+        filtered = df[(df["_date"].dt.date >= date_from) & (df["_date"].dt.date <= date_to)]
+        fname_tag = f"{date_from.strftime('%d%m%Y')}_to_{date_to.strftime('%d%m%Y')}"
 
     filtered = filtered.drop(columns=["_date", "_year", "_quarter"])
     st.caption(f"{len(filtered)} of {len(df)} reviews match the selection.")
 
     # Download
     st.divider()
-    filename = f"google_reviews_{selected_year}_{selected_q.replace(' ', '_')}.xlsx".replace("(", "").replace(")", "").replace("-", "")
+    filename = f"google_reviews_{fname_tag}.xlsx"
     st.download_button(
         label="⬇️ Download Excel",
         data=to_excel(filtered),
