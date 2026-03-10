@@ -9,13 +9,13 @@ import requests
 import subprocess
 from packaging.version import Version
 
-DB_PATH = "reviews.db"  # adjust path if needed
-LOCAL_VERSION = "1.2.1"  # update this when you git pull
-GITHUB_REPO  = "georgekhananaev/google-reviews-scraper-pro"
+DB_PATH = "reviews.db"
+LOCAL_VERSION = "1.2.1"
+GITHUB_REPO = "georgekhananaev/google-reviews-scraper-pro"
 EST = pytz.timezone("America/New_York")
 
+
 def to_est_date(utc_str):
-    """Convert UTC ISO string to EST date only (no time)."""
     if not utc_str:
         return None
     try:
@@ -26,8 +26,8 @@ def to_est_date(utc_str):
     except Exception:
         return None
 
+
 def to_utc_str(utc_str):
-    """Normalize UTC ISO string."""
     if not utc_str:
         return None
     try:
@@ -38,14 +38,13 @@ def to_utc_str(utc_str):
     except Exception:
         return utc_str
 
+
 def extract_text(field, lang="en"):
-    """Extract text from JSON description/owner_responses field."""
     if not field:
         return None
     try:
         data = json.loads(field) if isinstance(field, str) else field
         if isinstance(data, dict):
-            # Try requested lang first, then first available
             if lang in data:
                 val = data[lang]
                 return val.get("text", val) if isinstance(val, dict) else val
@@ -55,32 +54,33 @@ def extract_text(field, lang="en"):
         return field
     return None
 
+
 def load_reviews(db_path):
     con = sqlite3.connect(db_path)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
-    # Discover actual column names
+
     cur.execute("PRAGMA table_info(reviews)")
     cols = {row[1] for row in cur.fetchall()}
 
-    text_col        = "review_text"   if "review_text"   in cols else "description"
-    owner_text_col  = "owner_responses" if "owner_responses" in cols else "owner_reply"
-    owner_date_col  = "last_modified" if "last_modified"  in cols else "owner_response_date"
-    rating_col      = "rating"        if "rating"        in cols else "stars"
-    date_col        = "review_date"   if "review_date"   in cols else "date"
-    deleted_col     = "is_deleted"    if "is_deleted"    in cols else None
-    params_col      = "custom_params" if "custom_params" in cols else None
+    text_col       = "review_text"    if "review_text"    in cols else "description"
+    owner_text_col = "owner_responses" if "owner_responses" in cols else "owner_reply"
+    owner_date_col = "last_modified"  if "last_modified"  in cols else "owner_response_date"
+    rating_col     = "rating"         if "rating"         in cols else "stars"
+    date_col       = "review_date"    if "review_date"    in cols else "date"
+    deleted_col    = "is_deleted"     if "is_deleted"     in cols else None
+    params_col     = "custom_params"  if "custom_params"  in cols else None
 
     where = f"WHERE r.{deleted_col} = 0" if deleted_col else ""
 
     cur.execute(f"""
         SELECT
             r.author,
-            r.{text_col}        AS description,
-            r.{owner_text_col}  AS owner_responses,
-            r.{owner_date_col}  AS owner_response_date,
-            r.{rating_col}      AS rating,
-            r.{date_col}        AS review_date,
+            r.{text_col}          AS description,
+            r.{owner_text_col}    AS owner_responses,
+            r.{owner_date_col}    AS owner_response_date,
+            r.{rating_col}        AS rating,
+            r.{date_col}          AS review_date,
             {'r.' + params_col + ' AS custom_params' if params_col else 'NULL AS custom_params'}
         FROM reviews r
         {where}
@@ -90,10 +90,10 @@ def load_reviews(db_path):
     con.close()
     return rows
 
+
 def build_dataframe(rows):
     records = []
     for r in rows:
-        # Resolve business name: custom_params > places.name
         name = "Validated Claim Support"
         try:
             cp = json.loads(r["custom_params"]) if r["custom_params"] else {}
@@ -101,27 +101,27 @@ def build_dataframe(rows):
         except Exception:
             pass
 
-        owner_text = extract_text(r["owner_responses"])
+        owner_text    = extract_text(r["owner_responses"])
         owner_date_utc = r["owner_response_date"]
 
         records.append({
-            "name":                                  name,
-            "author_title":                          r["author"],
-            "review_text":                           extract_text(r["description"]),
-            "owner_answer":                          owner_text,
+            "name":                                          name,
+            "author_title":                                  r["author"],
+            "review_text":                                   extract_text(r["description"]),
+            "owner_answer":                                  owner_text,
             "owner_answer_timestamp_datetime_EST DATE ONLY": to_est_date(owner_date_utc),
-            "owner_answer_timestamp_datetime_utc":   to_utc_str(owner_date_utc),
-            "review_rating":                         r["rating"],
-            "review_datetime_EST DATE ONLY":         to_est_date(r["review_date"]),
-            "review_datetime_utc":                   to_utc_str(r["review_date"]),
+            "owner_answer_timestamp_datetime_utc":           to_utc_str(owner_date_utc),
+            "review_rating":                                 r["rating"],
+            "review_datetime_EST DATE ONLY":                 to_est_date(r["review_date"]),
+            "review_datetime_utc":                           to_utc_str(r["review_date"]),
         })
     return pd.DataFrame(records)
+
 
 def to_excel(df):
     buf = BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="Reviews")
-        # Auto-size columns
         ws = writer.sheets["Reviews"]
         for col in ws.columns:
             max_len = max((len(str(c.value)) for c in col if c.value), default=10)
@@ -129,8 +129,8 @@ def to_excel(df):
     buf.seek(0)
     return buf
 
+
 def get_last_scrape_time(db_path):
-    """Get the most recent scrape session end time from the database."""
     try:
         con = sqlite3.connect(db_path)
         cur = con.cursor()
@@ -144,7 +144,9 @@ def get_last_scrape_time(db_path):
         return row[0] if row else None
     except Exception:
         return None
-    """Returns (is_outdated, latest_version) or (None, None) on failure."""
+
+
+def check_scraper_version():
     try:
         r = requests.get(
             f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
@@ -157,7 +159,8 @@ def get_last_scrape_time(db_path):
         pass
     return None, None
 
-# ── UI ──────────────────────────────────────────────────────────────────────
+
+# ── UI ───────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Google Reviews Export", page_icon="⭐", layout="centered")
 st.title("⭐ Google Reviews Export")
 st.caption("Reads from the local scraper database and exports to Excel.")
@@ -166,42 +169,16 @@ st.caption("Reads from the local scraper database and exports to Excel.")
 is_outdated, latest = check_scraper_version()
 if is_outdated:
     st.warning(
-        f"⚠️ Scraper update available (v{latest}). "
-        f"Update before your next scrape to stay current.",
+        f"⚠️ Scraper update available (v{latest}). Update before your next scrape.",
         icon="⚠️"
     )
-    st.link_button(
-        "⬇️ Download Latest Version",
-        f"https://github.com/{GITHUB_REPO}/releases/latest"
-    )
+    st.link_button("⬇️ Download Latest Version", f"https://github.com/{GITHUB_REPO}/releases/latest")
 elif is_outdated is None:
     st.info("Could not check for scraper updates — GitHub may be unreachable.", icon="ℹ️")
 
 try:
     rows = load_reviews(DB_PATH)
-    df = build_dataframe(rows)
-
-    # Metrics
-    df["_date"] = pd.to_datetime(df["review_datetime_EST DATE ONLY"], errors="coerce")
-    avg_rating = df["review_rating"].mean()
-    has_owner = df["owner_answer"].notna() & (df["owner_answer"] != "")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Reviews", len(df))
-    col2.metric("Average Rating", f"{avg_rating:.2f} ⭐")
-    col3.metric("Owner Responses", has_owner.sum())
-
-    # Per-star breakdown
-    st.divider()
-    st.subheader("Rating Breakdown")
-    star_cols = st.columns(5)
-    for i, star in enumerate(range(5, 0, -1)):
-        count = (df["review_rating"] == star).sum()
-        pct = (count / len(df) * 100) if len(df) else 0
-        star_cols[i].metric(f"{'⭐' * star}", f"{count}", delta=f"{pct:.1f}%", delta_color="off")
-
-    # Preview
-    with st.expander("Preview data", expanded=True):
-        st.dataframe(df, use_container_width=True)
+    df   = build_dataframe(rows)
 
     # Last scrape time
     last_scrape = get_last_scrape_time(DB_PATH)
@@ -217,13 +194,35 @@ try:
     else:
         st.caption("📅 Last scraped: unknown")
 
+    # Summary metrics
+    df["_date"] = pd.to_datetime(df["review_datetime_EST DATE ONLY"], format="%d/%m/%Y", errors="coerce")
+    avg_rating  = df["review_rating"].mean()
+    has_owner   = df["owner_answer"].notna() & (df["owner_answer"] != "")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Reviews",    len(df))
+    col2.metric("Average Rating",   f"{avg_rating:.2f} ⭐")
+    col3.metric("Owner Responses",  has_owner.sum())
+
+    # Per-star breakdown
+    st.divider()
+    st.subheader("Rating Breakdown")
+    star_cols = st.columns(5)
+    for i, star in enumerate(range(5, 0, -1)):
+        count = (df["review_rating"] == star).sum()
+        pct   = (count / len(df) * 100) if len(df) else 0
+        star_cols[i].metric(f"{'⭐' * star}", f"{count}", delta=f"{pct:.1f}%", delta_color="off")
+
+    # Preview
+    with st.expander("Preview data", expanded=True):
+        st.dataframe(df.drop(columns=["_date"]), use_container_width=True)
+
     # Date filter
     st.divider()
     st.subheader("Filter by Date Range")
 
-    df["_year"] = df["_date"].dt.year
+    df["_year"]    = df["_date"].dt.year
     df["_quarter"] = df["_date"].dt.quarter
-    available = df[["_year", "_quarter"]].dropna().drop_duplicates()
+    available      = df[["_year", "_quarter"]].dropna().drop_duplicates()
     available_years = sorted(available["_year"].unique(), reverse=True)
 
     filter_mode = st.radio("Filter by", ["Quarter", "Custom date range"], horizontal=True)
@@ -255,8 +254,8 @@ try:
     else:
         col_from, col_to = st.columns(2)
         date_from = col_from.date_input("From", value=df["_date"].min().date(), min_value=df["_date"].min().date(), max_value=df["_date"].max().date())
-        date_to   = col_to.date_input("To", value=df["_date"].max().date(), min_value=df["_date"].min().date(), max_value=df["_date"].max().date())
-        filtered = df[(df["_date"].dt.date >= date_from) & (df["_date"].dt.date <= date_to)]
+        date_to   = col_to.date_input("To",     value=df["_date"].max().date(), min_value=df["_date"].min().date(), max_value=df["_date"].max().date())
+        filtered  = df[(df["_date"].dt.date >= date_from) & (df["_date"].dt.date <= date_to)]
         fname_tag = f"{date_from.strftime('%d%m%Y')}_to_{date_to.strftime('%d%m%Y')}"
 
     filtered = filtered.drop(columns=["_date", "_year", "_quarter"])
