@@ -146,6 +146,7 @@ def check_scraper_version():
 # ── UI ──────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Google Reviews Export", page_icon="⭐", layout="centered")
 st.title("⭐ Google Reviews Export")
+st.caption("Reads from the local scraper database and exports to Excel.")
 
 # Version check
 is_outdated, latest = check_scraper_version()
@@ -167,6 +168,7 @@ try:
     df = build_dataframe(rows)
 
     # Metrics
+    df["_date"] = pd.to_datetime(df["review_datetime_EST DATE ONLY"], errors="coerce")
     avg_rating = df["review_rating"].mean()
     has_owner = df["owner_answer"].notna() & (df["owner_answer"] != "")
     col1, col2, col3 = st.columns(3)
@@ -187,12 +189,46 @@ try:
     with st.expander("Preview data", expanded=True):
         st.dataframe(df, use_container_width=True)
 
+    # Last sync date
+    last_sync = df["_date"].max().date()
+    st.caption(f"📅 Last review sync: {last_sync.strftime('%B %d, %Y')}")
+
+    # Date filter
+    st.divider()
+    st.subheader("Filter by Date Range")
+
+    # Quarter dropdown
+    quarters_available = sorted(set(
+        (d.year, (d.month - 1) // 3 + 1)
+        for d in df["_date"].dropna().dt.date
+    ), reverse=True)
+    quarter_labels = {f"{y} Q{q}": (f"{y}-{(q-1)*3+1:02d}-01",
+        f"{y}-{q*3:02d}-{[31,30,30,31][q-1]}") for y, q in quarters_available}
+    quarter_labels = {"All time": None, **quarter_labels}
+
+    selected_q = st.selectbox("Select quarter", list(quarter_labels.keys()))
+
+    if selected_q == "All time" or quarter_labels[selected_q] is None:
+        date_from = df["_date"].min().date()
+        date_to   = df["_date"].max().date()
+    else:
+        qs, qe = quarter_labels[selected_q]
+        date_from = pd.to_datetime(qs).date()
+        date_to   = pd.to_datetime(qe).date()
+
+    col_from, col_to = st.columns(2)
+    date_from = col_from.date_input("From", value=date_from, min_value=df["_date"].min().date(), max_value=df["_date"].max().date())
+    date_to   = col_to.date_input("To",   value=date_to,   min_value=df["_date"].min().date(), max_value=df["_date"].max().date())
+
+    filtered = df[(df["_date"].dt.date >= date_from) & (df["_date"].dt.date <= date_to)].drop(columns=["_date"])
+    st.caption(f"{len(filtered)} of {len(df)} reviews match the selected date range.")
+
     # Download
     st.divider()
-    filename = f"google_reviews_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    filename = f"google_reviews_{date_from}_to_{date_to}.xlsx"
     st.download_button(
         label="⬇️ Download Excel",
-        data=to_excel(df),
+        data=to_excel(filtered),
         file_name=filename,
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
