@@ -81,10 +81,8 @@ def load_reviews(db_path):
             r.{owner_date_col}  AS owner_response_date,
             r.{rating_col}      AS rating,
             r.{date_col}        AS review_date,
-            p.name              AS place_name,
             {'r.' + params_col + ' AS custom_params' if params_col else 'NULL AS custom_params'}
         FROM reviews r
-        LEFT JOIN places p ON r.place_id = p.place_id
         {where}
         ORDER BY r.{date_col} DESC
     """)
@@ -96,12 +94,12 @@ def build_dataframe(rows):
     records = []
     for r in rows:
         # Resolve business name: custom_params > places.name
-        name = None
+        name = "Validated Claim Support"
         try:
             cp = json.loads(r["custom_params"]) if r["custom_params"] else {}
-            name = cp.get("company") or r["place_name"]
+            name = cp.get("company") or name
         except Exception:
-            name = r["place_name"]
+            pass
 
         owner_text = extract_text(r["owner_responses"])
         owner_date_utc = r["owner_response_date"]
