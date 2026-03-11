@@ -160,6 +160,10 @@ class RawReview:
             # Fallback: strip header lines from full container text
             if not owner_text and box.text:
                 owner_text = cls._strip_owner_header(box.text, owner_date)
+                
+            # Convert owner_date to ISO format *after* it was used to strip the header
+            if owner_date:
+                owner_date = parse_date_to_iso(owner_date)
 
         return cls(rid, author, rating, date, lang, text, likes,
                    photos, profile, avatar, owner_date, owner_text, review_date)

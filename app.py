@@ -23,7 +23,7 @@ def to_est_date(utc_str):
             dt = pytz.utc.localize(dt)
         return dt.astimezone(EST).strftime("%d-%b-%Y")
     except Exception:
-        return None
+        return utc_str 
 
 
 def extract_text(field, lang="en"):
