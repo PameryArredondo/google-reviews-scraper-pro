@@ -178,6 +178,13 @@ def get_workflow_status():
 
 # ── UI ───────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Google Reviews Export", page_icon="⭐", layout="centered")
+st.markdown("""
+    <style>
+        .block-container { padding-top: 2rem; padding-bottom: 1rem; }
+        div[data-testid="stVerticalBlock"] { gap: 0rem; }
+        hr { margin: 0.5rem 0; }
+    </style>
+""", unsafe_allow_html=True)
 st.title("⭐ Google Reviews Export")
 st.caption("Auto-scraped from Google Maps every Monday and Friday at 8:15 AM EST. Export to Excel below.")
 
