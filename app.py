@@ -168,7 +168,7 @@ def trigger_github_scrape():
     if not token:
         return False, "GITHUB_TOKEN not found in Streamlit secrets."
     resp = requests.post(
-        f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_SCRAPER_REPO}/actions/workflows/{GITHUB_WORKFLOW}/dispatches",
+        f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_SCRAPER_REPO}/actions/workflows/244378066/dispatches",
         headers={
             "Authorization": f"token {token}",
             "Accept": "application/vnd.github+json"
@@ -187,7 +187,7 @@ def get_workflow_status():
         return None
     try:
         resp = requests.get(
-            f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_SCRAPER_REPO}/actions/workflows/{GITHUB_WORKFLOW}/runs?per_page=1",
+            f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_SCRAPER_REPO}/actions/workflows/244378066/runs?per_page=1",
             headers={
                 "Authorization": f"token {token}",
                 "Accept": "application/vnd.github+json"
