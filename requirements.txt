@@ -4,3 +4,6 @@ openpyxl
 pytz
 requests
 packaging
+seleniumbase
+pymongo
+boto3
