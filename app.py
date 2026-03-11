@@ -231,12 +231,14 @@ with run_col:
         with st.spinner("Triggering scrape..."):
             ok, err = trigger_github_scrape()
         if ok:
-            st.success("Scrape triggered! Check status →")
+            st.success("Scrape triggered!")
+            st.session_state["check_status"] = True
         else:
             st.error(f"Failed to trigger: {err}")
 
 with status_col:
-    if st.button("Check Status"):
+    if st.button("Check Status") or st.session_state.get("check_status"):
+        st.session_state["check_status"] = False
         info = get_workflow_status()
         if info:
             s = info["status"]
