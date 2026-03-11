@@ -11,7 +11,7 @@ from packaging.version import Version
 DB_PATH = "reviews.db"
 LOCAL_VERSION = "1.2.1"
 GITHUB_REPO = "georgekhananaev/google-reviews-scraper-pro"
-GITHUB_OWNER = "PameryArredondo"  
+GITHUB_OWNER = "PameryArredondo"
 GITHUB_SCRAPER_REPO = "google-reviews-scraper-pro"
 GITHUB_WORKFLOW = "scrape.yml"
 EST = pytz.timezone("America/New_York")
@@ -140,7 +140,7 @@ def get_last_scrape_time(db_path):
         if not cur.fetchone():
             con.close()
             return None
-        cur.execute("SELECT MAX(end_time) FROM scrape_sessions")
+        cur.execute("SELECT MAX(completed_at) FROM scrape_sessions")
         row = cur.fetchone()
         con.close()
         return row[0] if row else None
@@ -212,8 +212,6 @@ def get_workflow_status():
 # ── UI ───────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Google Reviews Export", page_icon="⭐", layout="centered")
 st.title("⭐ Google Reviews Export")
-st.write(st.secrets.get("GITHUB_TOKEN", "NOT FOUND")[:10])
-st.write(f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_SCRAPER_REPO}/actions/workflows/244378066/dispatches")
 st.caption(
     "Automatically scraped from Google Maps via GitHub Actions every Monday and Friday "
     "at 8:15 AM EST — no manual steps required. The scraper runs in the cloud, updates "
