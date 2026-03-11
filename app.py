@@ -176,21 +176,6 @@ def get_workflow_status():
     return None
 
 
-def show_stats(df, label=""):
-    avg_rating = df["review_rating"].mean()
-    has_owner  = df["owner_answer"].notna() & (df["owner_answer"] != "")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Reviews",   len(df))
-    col2.metric("Average Rating",  f"{avg_rating:.2f} ⭐")
-    col3.metric("Owner Responses", has_owner.sum())
-
-    st.subheader("Rating Breakdown")
-    star_cols = st.columns(5)
-    for i, star in enumerate(range(5, 0, -1)):
-        count = (df["review_rating"] == star).sum()
-        star_cols[i].metric(f"{'⭐' * star}", f"{count}")
-
-
 # ── UI ───────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Google Reviews Export", page_icon="⭐", layout="centered")
 st.markdown("""
@@ -304,11 +289,9 @@ try:
 
     filtered = filtered.drop(columns=["_date", "_year", "_quarter"])
 
-    # Filtered stats
     if last_scrape:
         st.divider()
         st.caption(f"{len(filtered)} of {len(df)} reviews match the selection.")
-        show_stats(filtered, label="Filtered Reviews")
 
     # ── Step 3: Export ───────────────────────────────────────────────────────
     st.divider()
