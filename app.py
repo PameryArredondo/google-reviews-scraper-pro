@@ -212,16 +212,10 @@ def get_workflow_status():
 # ── UI ───────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Google Reviews Export", page_icon="⭐", layout="centered")
 st.title("⭐ Google Reviews Export")
-st.caption(
-    "Automatically scraped from Google Maps via GitHub Actions every Monday and Friday "
-    "at 8:15 AM EST — no manual steps required. The scraper runs in the cloud, updates "
-    "the database, and commits it back to the repo. This dashboard reads that database "
-    "and exports it to Excel."
-)
+st.caption("Auto-scraped from Google Maps every Monday and Friday at 8:15 AM EST. Export to Excel below.")
 
 # ── On-Demand Scrape ─────────────────────────────────────────────────────────
 st.divider()
-st.subheader("🔄 On-Demand Scrape")
 st.caption("Trigger a scrape outside of the scheduled Monday/Friday runs.")
 
 run_col, status_col = st.columns([1, 2])
