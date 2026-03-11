@@ -27,6 +27,7 @@ from modules.models import RawReview
 from modules.pipeline import PostScrapeRunner
 from modules.review_db import ReviewDB
 from modules.place_id import extract_place_id
+from modules.utils import attach_timestamp_interceptor
 
 # Logger
 log = logging.getLogger("scraper")
@@ -1267,6 +1268,7 @@ class GoogleReviewsScraper:
         driver = None
         try:
             driver = self.setup_driver(headless)
+            ts_cache = attach_timestamp_interceptor(driver)
             wait = WebDriverWait(driver, 20)  # Reduced from 40 to 20 for faster timeout
 
             # Navigate using limited-view bypass (search-based navigation)
@@ -1458,7 +1460,7 @@ class GoogleReviewsScraper:
                             "likes": raw.likes,
                             "lang": raw.lang,
                             "date": raw.date,
-                            "review_date": raw.review_date,
+                             "review_date": ts_cache.get(raw.id) or raw.review_date,
                             "author": raw.author,
                             "profile": raw.profile,
                             "avatar": raw.avatar,
