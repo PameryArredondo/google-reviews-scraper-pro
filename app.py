@@ -163,7 +163,7 @@ def check_scraper_version():
 # ── UI ───────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Google Reviews Export", page_icon="⭐", layout="centered")
 st.title("⭐ Google Reviews Export")
-st.caption("Reads from the local scraper database and exports to Excel.")
+st.caption("Automatically scraped from Google Maps via GitHub Actions every Monday and Friday at 8:15 AM EST — no manual steps required. The scraper runs in the cloud, updates the database, and commits it back to the repo. This dashboard reads that database and exports it to Excel.")
 
 # Version check
 is_outdated, latest = check_scraper_version()
