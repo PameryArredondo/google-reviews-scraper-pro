@@ -1463,6 +1463,7 @@ class GoogleReviewsScraper:
                             "profile": raw.profile,
                             "avatar": raw.avatar,
                             "owner_text": raw.owner_text,
+                            "owner_date": raw.owner_date,
                             "photos": raw.photos,
                         }
                         result = self.review_db.upsert_review(
