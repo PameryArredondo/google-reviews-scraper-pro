@@ -27,7 +27,7 @@ from modules.models import RawReview
 from modules.pipeline import PostScrapeRunner
 from modules.review_db import ReviewDB
 from modules.place_id import extract_place_id
-from modules.utils import attach_timestamp_interceptor
+from modules.utils import attach_timestamp_interceptor, poll_timestamp_responses
 
 # Logger
 log = logging.getLogger("scraper")
@@ -197,87 +197,82 @@ class GoogleReviewsScraper:
             "last_modified_date": db_review.get("last_modified", ""),
         }
 
-    def setup_driver(self, headless: bool):
-        """
-        Set up and configure Chrome driver using SeleniumBase UC Mode.
-        SeleniumBase provides enhanced anti-detection and automatic Chrome/ChromeDriver version management.
-        Works in both Docker containers and on regular OS installations (Windows, Mac, Linux).
-        """
-        # Log platform information for debugging
-        log.info(f"Platform: {platform.platform()}")
-        log.info(f"Python version: {platform.python_version()}")
-        log.info("Using SeleniumBase UC Mode for enhanced anti-detection")
+  def setup_driver(self, headless: bool):
+    """
+    Set up and configure Chrome driver using SeleniumBase UC Mode.
+    SeleniumBase provides enhanced anti-detection and automatic Chrome/ChromeDriver version management.
+    Works in both Docker containers and on regular OS installations (Windows, Mac, Linux).
+    """
+    log.info(f"Platform: {platform.platform()}")
+    log.info(f"Python version: {platform.python_version()}")
+    log.info("Using SeleniumBase UC Mode for enhanced anti-detection")
 
-        # Determine if we're running in a container
-        in_container = os.environ.get('CHROME_BIN') is not None
+    perf_caps = {"goog:loggingPrefs": {"performance": "ALL"}}
 
-        if in_container:
-            chrome_binary = os.environ.get('CHROME_BIN')
-            log.info(f"Container environment detected")
-            log.info(f"Chrome binary: {chrome_binary}")
-
-            # Create driver with custom binary location for containers
-            if chrome_binary and os.path.exists(chrome_binary):
-                try:
-                    driver = Driver(
-                        uc=True,
-                        headless=headless,
-                        binary_location=chrome_binary,
-                        page_load_strategy="normal"
-                    )
-                    log.info("Successfully created SeleniumBase UC driver with custom binary")
-                except Exception as e:
-                    log.warning(f"Failed to create driver with custom binary: {e}")
-                    # Fall back to default
-                    driver = Driver(
-                        uc=True,
-                        headless=headless,
-                        page_load_strategy="normal"
-                    )
-                    log.info("Successfully created SeleniumBase UC driver with defaults")
-            else:
-                driver = Driver(
-                    uc=True,
-                    headless=headless,
-                    page_load_strategy="normal"
-                )
-                log.info("Successfully created SeleniumBase UC driver")
-        else:
-            # Regular OS environment - SeleniumBase handles version matching automatically
-            log.info("Creating SeleniumBase UC Mode driver")
+    in_container = os.environ.get('CHROME_BIN') is not None
+    if in_container:
+        chrome_binary = os.environ.get('CHROME_BIN')
+        log.info(f"Container environment detected")
+        log.info(f"Chrome binary: {chrome_binary}")
+        if chrome_binary and os.path.exists(chrome_binary):
             try:
                 driver = Driver(
                     uc=True,
                     headless=headless,
+                    binary_location=chrome_binary,
                     page_load_strategy="normal",
-                    incognito=True  # Use incognito mode for better stealth
+                    desired_capabilities=perf_caps
                 )
-                log.info("Successfully created SeleniumBase UC driver")
+                log.info("Successfully created SeleniumBase UC driver with custom binary")
             except Exception as e:
-                log.error(f"Failed to create SeleniumBase driver: {e}")
-                raise
-
-        # Set page load timeout to avoid hanging
-        driver.set_page_load_timeout(30)
-
-        # Set window size
-        driver.set_window_size(1400, 900)
-
-        # Add additional stealth settings and Google Maps login-state bypass
+                log.warning(f"Failed to create driver with custom binary: {e}")
+                driver = Driver(
+                    uc=True,
+                    headless=headless,
+                    page_load_strategy="normal",
+                    desired_capabilities=perf_caps
+                )
+                log.info("Successfully created SeleniumBase UC driver with defaults")
+        else:
+            driver = Driver(
+                uc=True,
+                headless=headless,
+                page_load_strategy="normal",
+                desired_capabilities=perf_caps
+            )
+            log.info("Successfully created SeleniumBase UC driver")
+    else:
+        log.info("Creating SeleniumBase UC Mode driver")
         try:
-            driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
-                'source': '''
-                    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-                    Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-                    Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
-                '''
-            })
-            log.info("Additional stealth settings applied")
+            driver = Driver(
+                uc=True,
+                headless=headless,
+                page_load_strategy="normal",
+                incognito=True,
+                desired_capabilities=perf_caps
+            )
+            log.info("Successfully created SeleniumBase UC driver")
         except Exception as e:
-            log.debug(f"Could not apply additional stealth settings: {e}")
+            log.error(f"Failed to create SeleniumBase driver: {e}")
+            raise
 
-        log.info("SeleniumBase UC driver setup completed successfully")
-        return driver
+    driver.set_page_load_timeout(30)
+    driver.set_window_size(1400, 900)
+
+    try:
+        driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+            'source': '''
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+                Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+            '''
+        })
+        log.info("Additional stealth settings applied")
+    except Exception as e:
+        log.debug(f"Could not apply additional stealth settings: {e}")
+
+    log.info("SeleniumBase UC driver setup completed successfully")
+    return driver
 
     def dismiss_cookies(self, driver: Chrome):
         """
@@ -1394,7 +1389,9 @@ class GoogleReviewsScraper:
                 if self.cancel_event.is_set():
                     log.info("Scrape cancelled by user request")
                     raise InterruptedError("Scrape cancelled")
-
+                  
+                poll_timestamp_responses(driver, ts_cache)
+              
                 try:
                     cards = pane.find_elements(By.CSS_SELECTOR, CARD_SEL)
                     fresh_cards: List[WebElement] = []
