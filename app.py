@@ -292,8 +292,8 @@ try:
 
     else:
         col_from, col_to = st.columns(2)
-        date_from = col_from.date_input("From", value=df["_date"].min().date(), min_value=df["_date"].min().date(), max_value=df["_date"].max().date())
-        date_to   = col_to.date_input("To",     value=df["_date"].max().date(), min_value=df["_date"].min().date(), max_value=df["_date"].max().date())
+        date_from = col_from.date_input("From", value=df["_date"].min().date(), min_value=df["_date"].min().date(), max_value=df["_date"].max().date(), format="MM/DD/YYYY")
+        date_to   = col_to.date_input("To",     value=df["_date"].max().date(), min_value=df["_date"].min().date(), max_value=df["_date"].max().date(), format="MM/DD/YYYY")
         filtered  = df[(df["_date"].dt.date >= date_from) & (df["_date"].dt.date <= date_to)]
         fname_tag = f"{date_from.strftime('%d%m%Y')}_to_{date_to.strftime('%d%m%Y')}"
 
