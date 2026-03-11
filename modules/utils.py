@@ -1,12 +1,13 @@
 """
 Utility functions for Google Maps Reviews Scraper.
 """
+import json
 import logging
 import re
 import time
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
-from typing import List
+from typing import List, Dict, Any
 
 from selenium.common.exceptions import (NoSuchElementException,
                                         StaleElementReferenceException,
@@ -65,161 +66,161 @@ def first_text(el: WebElement, css: str) -> str:
 _UNIT_KEYWORDS = {
     "year": [
         "year", "years",
-        "tahun",                                          # Indonesian
-        "año", "años",                                    # Spanish
-        "an", "ans", "année", "années",                   # French
-        "jahr", "jahre", "jahren",                        # German
-        "anno", "anni",                                   # Italian
-        "ano", "anos",                                    # Portuguese
-        "год", "года", "лет",                             # Russian
-        "년",                                             # Korean
-        "年",                                             # Japanese / Chinese
-        "سنة", "سنوات",                                   # Arabic
-        "साल", "वर्ष",                                     # Hindi
-        "yıl",                                            # Turkish
-        "jaar", "jaren",                                  # Dutch
-        "rok", "lat", "lata", "roku",                     # Polish
-        "năm",                                            # Vietnamese
-        "år",                                             # Swedish / Norwegian / Danish
-        "vuosi", "vuotta",                                # Finnish
-        "χρόνο", "χρόνια", "έτος", "έτη",                 # Greek
-        "roky", "let", "lety",                            # Czech
-        "ani",                                            # Romanian
-        "év", "éve", "évet",                              # Hungarian
-        "ปี",                                             # Thai
-        "שנה", "שנים",                                     # Hebrew
-        "година", "години",                                # Bulgarian
+        "tahun",
+        "año", "años",
+        "an", "ans", "année", "années",
+        "jahr", "jahre", "jahren",
+        "anno", "anni",
+        "ano", "anos",
+        "год", "года", "лет",
+        "년",
+        "年",
+        "سنة", "سنوات",
+        "साल", "वर्ष",
+        "yıl",
+        "jaar", "jaren",
+        "rok", "lat", "lata", "roku",
+        "năm",
+        "år",
+        "vuosi", "vuotta",
+        "χρόνο", "χρόνια", "έτος", "έτη",
+        "roky", "let", "lety",
+        "ani",
+        "év", "éve", "évet",
+        "ปี",
+        "שנה", "שנים",
+        "година", "години",
     ],
     "month": [
         "month", "months",
-        "bulan",                                          # Indonesian
-        "mes", "meses",                                   # Spanish
-        "mois",                                           # French
-        "monat", "monate", "monaten",                     # German
-        "mese", "mesi",                                   # Italian
-        "mês",                                            # Portuguese
-        "месяц", "месяца", "месяцев",                     # Russian
-        "개월",                                            # Korean
-        "か月", "ヶ月", "ケ月", "个月", "個月",               # Japanese / Chinese
-        "شهر", "أشهر", "شهور",                             # Arabic
-        "महीना", "महीने",                                   # Hindi
-        "ay",                                             # Turkish
-        "maand", "maanden",                               # Dutch
-        "miesiąc", "miesiące", "miesięcy",                # Polish
-        "tháng",                                          # Vietnamese
-        "månad", "månader",                               # Swedish
-        "måned", "måneder",                               # Norwegian / Danish
-        "kuukausi", "kuukautta",                          # Finnish
-        "μήνα", "μήνες",                                   # Greek
-        "měsíc", "měsíce", "měsíců", "měsíci",           # Czech
-        "lună", "luni",                                   # Romanian
-        "hónap", "hónapja",                               # Hungarian
-        "เดือน",                                           # Thai
-        "חודש", "חודשים",                                   # Hebrew
-        "месец", "месеца",                                 # Bulgarian
+        "bulan",
+        "mes", "meses",
+        "mois",
+        "monat", "monate", "monaten",
+        "mese", "mesi",
+        "mês",
+        "месяц", "месяца", "месяцев",
+        "개월",
+        "か月", "ヶ月", "ケ月", "个月", "個月",
+        "شهر", "أشهر", "شهور",
+        "महीना", "महीने",
+        "ay",
+        "maand", "maanden",
+        "miesiąc", "miesiące", "miesięcy",
+        "tháng",
+        "månad", "månader",
+        "måned", "måneder",
+        "kuukausi", "kuukautta",
+        "μήνα", "μήνες",
+        "měsíc", "měsíce", "měsíců", "měsíci",
+        "lună", "luni",
+        "hónap", "hónapja",
+        "เดือน",
+        "חודש", "חודשים",
+        "месец", "месеца",
     ],
     "week": [
         "week", "weeks",
-        "minggu",                                         # Indonesian
-        "semana", "semanas",                              # Spanish / Portuguese
-        "semaine", "semaines",                            # French
-        "woche", "wochen",                                # German
-        "settimana", "settimane",                         # Italian
-        "неделя", "недели", "недель",                      # Russian
-        "주",                                              # Korean
-        "週間", "週",                                       # Japanese
-        "周",                                              # Chinese
-        "أسبوع", "أسابيع",                                  # Arabic
-        "हफ्ता", "हफ्ते", "सप्ताह",                         # Hindi
-        "hafta",                                          # Turkish
-        "weken",                                          # Dutch
-        "tydzień", "tygodnie", "tygodni",                 # Polish
-        "tuần",                                           # Vietnamese
-        "vecka", "veckor",                                # Swedish
-        "uke", "uker",                                    # Norwegian
-        "uge", "uger",                                    # Danish
-        "viikko", "viikkoa",                              # Finnish
-        "εβδομάδα", "εβδομάδες",                           # Greek
-        "týden", "týdny", "týdnů",                        # Czech
-        "săptămână", "săptămâni",                         # Romanian
-        "hét", "hete",                                    # Hungarian
-        "สัปดาห์",                                          # Thai
-        "שבוע", "שבועות",                                   # Hebrew
-        "седмица", "седмици",                               # Bulgarian
+        "minggu",
+        "semana", "semanas",
+        "semaine", "semaines",
+        "woche", "wochen",
+        "settimana", "settimane",
+        "неделя", "недели", "недель",
+        "주",
+        "週間", "週",
+        "周",
+        "أسبوع", "أسابيع",
+        "हफ्ता", "हफ्ते", "सप्ताह",
+        "hafta",
+        "weken",
+        "tydzień", "tygodnie", "tygodni",
+        "tuần",
+        "vecka", "veckor",
+        "uke", "uker",
+        "uge", "uger",
+        "viikko", "viikkoa",
+        "εβδομάδα", "εβδομάδες",
+        "týden", "týdny", "týdnů",
+        "săptămână", "săptămâni",
+        "hét", "hete",
+        "สัปดาห์",
+        "שבוע", "שבועות",
+        "седмица", "седмици",
     ],
     "day": [
         "day", "days",
-        "hari",                                           # Indonesian
-        "día", "días",                                    # Spanish
-        "jour", "jours",                                  # French
-        "tag", "tage", "tagen",                           # German
-        "giorno", "giorni",                               # Italian
-        "dia", "dias",                                    # Portuguese
-        "день", "дня", "дней",                             # Russian
-        "일",                                              # Korean
-        "日",                                              # Japanese / Chinese
-        "يوم", "أيام",                                      # Arabic
-        "दिन",                                              # Hindi
-        "gün",                                            # Turkish
-        "dag", "dagen", "dagar",                          # Dutch / Swedish / Norwegian / Danish
-        "dzień", "dni",                                   # Polish
-        "ngày",                                           # Vietnamese
-        "päivä", "päivää",                                # Finnish
-        "ημέρα", "ημέρες", "μέρα", "μέρες",               # Greek
-        "den", "dny", "dnů", "dní",                       # Czech
-        "zi", "zile",                                     # Romanian
-        "nap", "napja",                                   # Hungarian
-        "วัน",                                             # Thai
-        "יום", "ימים",                                      # Hebrew
-        "ден", "дни",                                      # Bulgarian
+        "hari",
+        "día", "días",
+        "jour", "jours",
+        "tag", "tage", "tagen",
+        "giorno", "giorni",
+        "dia", "dias",
+        "день", "дня", "дней",
+        "일",
+        "日",
+        "يوم", "أيام",
+        "दिन",
+        "gün",
+        "dag", "dagen", "dagar",
+        "dzień", "dni",
+        "ngày",
+        "päivä", "päivää",
+        "ημέρα", "ημέρες", "μέρα", "μέρες",
+        "den", "dny", "dnů", "dní",
+        "zi", "zile",
+        "nap", "napja",
+        "วัน",
+        "יום", "ימים",
+        "ден", "дни",
     ],
     "hour": [
         "hour", "hours",
-        "jam",                                            # Indonesian
-        "hora", "horas",                                  # Spanish / Portuguese
-        "heure", "heures",                                # French
-        "stunde", "stunden",                              # German
-        "ora", "ore",                                     # Italian / Romanian
-        "час", "часа", "часов",                            # Russian / Bulgarian
-        "시간",                                             # Korean
-        "時間",                                             # Japanese
-        "小时", "小時",                                      # Chinese
-        "ساعة", "ساعات",                                    # Arabic
-        "घंटा", "घंटे",                                     # Hindi
-        "saat",                                           # Turkish
-        "uur",                                            # Dutch
-        "godzina", "godziny", "godzin",                   # Polish
-        "giờ",                                            # Vietnamese
-        "timme", "timmar",                                # Swedish
-        "time", "timer",                                  # Norwegian / Danish
-        "tunti", "tuntia",                                # Finnish
-        "ώρα", "ώρες",                                     # Greek
-        "hodina", "hodiny", "hodin",                      # Czech
-        "óra", "órája",                                   # Hungarian
-        "ชั่วโมง",                                          # Thai
-        "שעה", "שעות",                                      # Hebrew
+        "jam",
+        "hora", "horas",
+        "heure", "heures",
+        "stunde", "stunden",
+        "ora", "ore",
+        "час", "часа", "часов",
+        "시간",
+        "時間",
+        "小时", "小時",
+        "ساعة", "ساعات",
+        "घंटा", "घंटे",
+        "saat",
+        "uur",
+        "godzina", "godziny", "godzin",
+        "giờ",
+        "timme", "timmar",
+        "time", "timer",
+        "tunti", "tuntia",
+        "ώρα", "ώρες",
+        "hodina", "hodiny", "hodin",
+        "óra", "órája",
+        "ชั่วโมง",
+        "שעה", "שעות",
     ],
     "minute": [
         "minute", "minutes",
-        "menit",                                          # Indonesian
-        "minuto", "minutos",                              # Spanish / Portuguese / Italian
-        "minuten",                                        # German / Dutch
-        "minuti",                                         # Italian
-        "минута", "минуты", "минут", "минути",             # Russian / Bulgarian
-        "분",                                              # Korean
-        "分",                                              # Japanese / Chinese
-        "دقيقة", "دقائق",                                   # Arabic
-        "मिनट",                                             # Hindi
-        "dakika",                                         # Turkish
-        "minuta", "minuty", "minut",                      # Polish / Czech
-        "phút",                                           # Vietnamese
-        "minuter",                                        # Swedish
-        "minutt", "minutter",                             # Norwegian / Danish
-        "minuutti", "minuuttia",                          # Finnish
-        "λεπτό", "λεπτά",                                  # Greek
-        "perc", "perce",                                  # Hungarian
-        "นาที",                                            # Thai
-        "דקה", "דקות",                                      # Hebrew
+        "menit",
+        "minuto", "minutos",
+        "minuten",
+        "minuti",
+        "минута", "минуты", "минут", "минути",
+        "분",
+        "分",
+        "دقيقة", "دقائق",
+        "मिनट",
+        "dakika",
+        "minuta", "minuty", "minut",
+        "phút",
+        "minuter",
+        "minutt", "minutter",
+        "minuutti", "minuuttia",
+        "λεπτό", "λεπτά",
+        "perc", "perce",
+        "นาที",
+        "דקה", "דקות",
     ],
 }
 
@@ -240,7 +241,10 @@ _SORTED_KEYWORDS = sorted(_WORD_TO_UNIT.items(), key=lambda x: -len(x[0]))
 
 
 def parse_date_to_iso(date_str: str) -> str:
-    """Parse relative date strings in 25+ languages into ISO format."""
+    """
+    Parse relative date strings in 25+ languages into ISO format.
+    Used as a fallback when exact timestamp is not available from the API.
+    """
     if not date_str:
         return ""
 
@@ -281,6 +285,105 @@ def _compute_date(now: datetime, unit: str, amount: int) -> str:
     return dt.isoformat()
 
 
+# ---------------------------------------------------------------------------
+# Exact timestamp extraction via CDP network interception
+# ---------------------------------------------------------------------------
+
+def _parse_listugcposts(response_text: str) -> Dict[str, str]:
+    """
+    Parse a raw listugcposts API response and return a dict mapping
+    review_id -> exact ISO date string (YYYY-MM-DD).
+
+    The response is a XSSI-protected JSON array:
+      parsed[2] = list of reviews
+      each review: r[0][1][2] = microsecond timestamp (16-digit int)
+                   r[0][0]    = review ID string (matches data-review-id in DOM)
+    """
+    result: Dict[str, str] = {}
+    try:
+        clean = response_text.lstrip(")]}'\n")
+        parsed = json.loads(clean)
+        reviews = parsed[2] if len(parsed) > 2 else None
+        if not reviews:
+            return result
+        for r in reviews:
+            try:
+                inner = r[0]
+                if not inner:
+                    continue
+                review_id = inner[0]          # data-review-id value
+                place_data = inner[1]
+                if not place_data or not review_id:
+                    continue
+                ts_us = place_data[2]         # microseconds since epoch
+                if ts_us:
+                    dt = datetime.fromtimestamp(ts_us / 1_000_000, tz=timezone.utc)
+                    result[review_id] = dt.date().isoformat()
+            except Exception as e:
+                log.debug(f"Error parsing individual review in listugcposts: {e}")
+    except Exception as e:
+        log.debug(f"Error parsing listugcposts response: {e}")
+    return result
+
+
+def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, str]:
+    """
+    Attach a CDP Network listener to the driver that captures exact review
+    dates from Google Maps' listugcposts API responses.
+
+    Call this ONCE immediately after setup_driver(), before any navigation.
+
+    Returns a shared dict that is populated in-place as reviews load.
+    The dict maps review_id (str) -> ISO date string (str, e.g. "2026-03-06").
+    Pass this dict into RawReview.from_card() or the scrape loop to look up
+    exact dates by review ID instead of parsing relative strings.
+
+    Usage:
+        driver = self.setup_driver(headless)
+        ts_cache = attach_timestamp_interceptor(driver)
+        # ... navigate, scroll reviews ...
+        # ts_cache is now populated with review_id -> date entries
+        exact_date = ts_cache.get(review_id)  # "2026-03-06" or None
+    """
+    ts_cache: Dict[str, str] = {}
+
+    try:
+        driver.execute_cdp_cmd("Network.enable", {})
+
+        def on_response(event: Dict[str, Any]) -> None:
+            url = event.get("response", {}).get("url", "")
+            if "listugcposts" not in url:
+                return
+            request_id = event.get("requestId")
+            if not request_id:
+                return
+            try:
+                body = driver.execute_cdp_cmd(
+                    "Network.getResponseBody", {"requestId": request_id}
+                )
+                text = body.get("body", "")
+                if not text:
+                    return
+                batch = _parse_listugcposts(text)
+                ts_cache.update(batch)
+                log.debug(f"listugcposts: captured {len(batch)} timestamps, total {len(ts_cache)}")
+            except Exception as e:
+                log.debug(f"CDP response capture error: {e}")
+
+        driver.add_cdp_listener("Network.responseReceived", on_response)
+        log.info("CDP timestamp interceptor attached")
+
+    except Exception as e:
+        log.warning(f"Could not attach CDP timestamp interceptor: {e}. "
+                    f"Falling back to relative date parsing.")
+
+    return ts_cache
+
+
+# ---------------------------------------------------------------------------
+# Existing helper utilities (unchanged)
+# ---------------------------------------------------------------------------
+
 def first_attr(el: WebElement, css: str, attr: str) -> str:
     """Get attribute value from the first matching element that has a non-empty value"""
     for e in try_find(el, css, all=True):
@@ -295,23 +398,12 @@ def first_attr(el: WebElement, css: str, attr: str) -> str:
 def click_if(driver: Chrome, css: str, delay: float = .25, timeout: float = 5.0) -> bool:
     """
     Click element if it exists and is clickable, with timeout and better error handling.
-
-    Args:
-        driver: WebDriver instance
-        css: CSS selector for the element to click
-        delay: Time to wait after clicking (seconds)
-        timeout: Maximum time to wait for element (seconds)
-
-    Returns:
-        True if element was found and clicked, False otherwise
     """
     try:
-        # First check if elements exist at all
         elements = driver.find_elements(By.CSS_SELECTOR, css)
         if not elements:
             return False
 
-        # Try clicking the first visible element
         for element in elements:
             try:
                 if element.is_displayed() and element.is_enabled():
@@ -319,10 +411,8 @@ def click_if(driver: Chrome, css: str, delay: float = .25, timeout: float = 5.0)
                     time.sleep(delay)
                     return True
             except Exception:
-                # Try next element if this one fails
                 continue
 
-        # If we couldn't click any of the direct elements, try with WebDriverWait
         try:
             WebDriverWait(driver, timeout).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, css))
