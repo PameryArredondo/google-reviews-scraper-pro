@@ -26,7 +26,6 @@ def to_est_date(utc_str):
         return None
 
 
-
 def extract_text(field, lang="en"):
     if not field:
         return None
@@ -93,13 +92,13 @@ def build_dataframe(rows):
         owner_date_utc = r["owner_response_date"]
 
         records.append({
-            "name":               name,
-            "author_title":       r["author"],
-            "review_text":        extract_text(r["description"]),
-            "owner_answer":       owner_text,
-            "owner_answer_date":  to_est_date(owner_date_utc),
-            "review_rating":      r["rating"],
-            "review_date":        to_est_date(r["review_date"]),
+            "name":              name,
+            "author_title":      r["author"],
+            "review_text":       extract_text(r["description"]),
+            "owner_answer":      owner_text,
+            "owner_answer_date": to_est_date(owner_date_utc),
+            "review_rating":     r["rating"],
+            "review_date":       to_est_date(r["review_date"]),
         })
     return pd.DataFrame(records)
 
@@ -258,10 +257,6 @@ try:
         pct   = (count / len(df) * 100) if len(df) else 0
         star_cols[i].metric(f"{'⭐' * star}", f"{count}", delta=f"{pct:.1f}%", delta_color="off")
 
-    # Preview
-    with st.expander("Preview data", expanded=True):
-        st.dataframe(df.drop(columns=["_date"]), use_container_width=True)
-
     # Date filter
     st.divider()
     st.subheader("Filter by Date Range")
@@ -316,6 +311,11 @@ try:
         file_name=filename,
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+    # Preview — full dataset, always at the bottom
+    st.divider()
+    with st.expander("Preview data", expanded=False):
+        st.dataframe(filtered, use_container_width=True)
 
 except Exception as e:
     st.error(f"Could not load database: {e}")
