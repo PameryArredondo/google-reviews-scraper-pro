@@ -1031,7 +1031,10 @@ class ReviewDB:
         if owner_text:
             from modules.utils import detect_lang
             lang = detect_lang(owner_text)
-            return {lang: {"text": owner_text}}
+            return {lang: {
+                "text": owner_text,
+                "date": review.get("owner_date", ""),
+            }}
         return {}
 
     @staticmethod

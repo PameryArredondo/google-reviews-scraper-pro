@@ -88,15 +88,29 @@ def build_dataframe(rows):
         except Exception:
             pass
 
-        owner_text     = extract_text(r["owner_responses"])
-        owner_date_utc = r["owner_response_date"]
+        # Parse owner_responses JSON to get text and date
+        owner_text = None
+        owner_date = None
+        try:
+            owner_data = json.loads(r["owner_responses"]) if r["owner_responses"] else {}
+            if isinstance(owner_data, dict) and owner_data:
+                # Get first language entry
+                first_entry = next(iter(owner_data.values()))
+                if isinstance(first_entry, dict):
+                    owner_text = first_entry.get("text") or None
+                    raw_date = first_entry.get("date", "")
+                    owner_date = to_est_date(raw_date) if raw_date else None
+                else:
+                    owner_text = first_entry or None
+        except Exception:
+            pass
 
         records.append({
             "name":              name,
             "author_title":      r["author"],
             "review_text":       extract_text(r["description"]),
             "owner_answer":      owner_text,
-            "owner_answer_date": to_est_date(owner_date_utc),
+            "owner_answer_date": owner_date,
             "review_rating":     r["rating"],
             "review_date":       to_est_date(r["review_date"]),
         })
