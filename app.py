@@ -52,7 +52,7 @@ def load_reviews(db_path):
 
     text_col       = "review_text"     if "review_text"     in cols else "description"
     owner_text_col = "owner_responses" if "owner_responses" in cols else "owner_reply"
-    owner_date_col = "last_modified"   if "last_modified"   in cols else "owner_response_date"
+    owner_date_col = "owner_response_date" if "owner_response_date" in cols else "last_modified"
     rating_col     = "rating"          if "rating"          in cols else "stars"
     date_col       = "review_date"     if "review_date"     in cols else "date"
     deleted_col    = "is_deleted"      if "is_deleted"      in cols else None
@@ -88,18 +88,14 @@ def build_dataframe(rows):
         except Exception:
             pass
 
-        # Parse owner_responses JSON to get text and date
+        # Parse owner_responses JSON to get text only
         owner_text = None
-        owner_date = None
         try:
             owner_data = json.loads(r["owner_responses"]) if r["owner_responses"] else {}
             if isinstance(owner_data, dict) and owner_data:
-                # Get first language entry
                 first_entry = next(iter(owner_data.values()))
                 if isinstance(first_entry, dict):
                     owner_text = first_entry.get("text") or None
-                    raw_date = first_entry.get("date", "")
-                    owner_date = to_est_date(raw_date) if raw_date else None
                 else:
                     owner_text = first_entry or None
         except Exception:
@@ -110,7 +106,7 @@ def build_dataframe(rows):
             "author_title":      r["author"],
             "review_text":       extract_text(r["description"]),
             "owner_answer":      owner_text,
-            "owner_answer_date": owner_date,
+            "owner_answer_date": to_est_date(r["owner_response_date"]),
             "review_rating":     r["rating"],
             "review_date":       to_est_date(r["review_date"]),
         })

@@ -23,7 +23,7 @@ from modules.place_id import canonicalize_url
 
 log = logging.getLogger("scraper")
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA_DDL = """
 -- Schema version tracking (single-row model)
@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS reviews (
     profile_picture TEXT,
     s3_profile_picture TEXT,
     owner_responses TEXT,
+    owner_response_date  TEXT,
     created_date   TEXT NOT NULL,
     last_modified  TEXT NOT NULL,
     last_seen_session INTEGER,
@@ -367,15 +368,18 @@ class ReviewDB:
                 "INSERT INTO reviews ("
                 "review_id, place_id, author, rating, review_text, review_date, "
                 "raw_date, likes, user_images, profile_url, profile_picture, "
-                "owner_responses, created_date, last_modified, last_seen_session, "
-                "last_changed_session, is_deleted, content_hash, engagement_hash, row_version"
-                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1)",
+                "owner_responses, owner_response_date, created_date, last_modified, "
+                "last_seen_session, last_changed_session, is_deleted, "
+                "content_hash, engagement_hash, row_version"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1)",
                 (review_id, place_id, review.get("author", ""),
                  review.get("rating", 0), review_text,
                  review.get("review_date", ""), review.get("date", ""),
                  review.get("likes", 0), user_images,
                  review.get("profile", ""), review.get("avatar", ""),
-                 owner_responses, now, now, session_id, session_id,
+                 owner_responses,
+                 review.get("owner_date", ""),   # <-- new
+                 now, now, session_id, session_id,
                  content_hash, engagement_hash)
             )
             self.backend.commit()
@@ -464,8 +468,8 @@ class ReviewDB:
                 "UPDATE reviews SET "
                 "author = ?, rating = ?, review_text = ?, review_date = ?, "
                 "raw_date = ?, likes = ?, user_images = ?, profile_url = ?, "
-                "profile_picture = ?, owner_responses = ?, last_modified = ?, "
-                "last_seen_session = ?, last_changed_session = ?, "
+                "profile_picture = ?, owner_responses = ?, owner_response_date = ?, "
+                "last_modified = ?, last_seen_session = ?, last_changed_session = ?, "
                 "is_deleted = 0, content_hash = ?, engagement_hash = ?, "
                 "row_version = row_version + 1 "
                 "WHERE review_id = ? AND place_id = ? AND row_version = ?",
@@ -479,10 +483,12 @@ class ReviewDB:
                  review.get("profile", "") or existing.get("profile_url", ""),
                  profile_picture,
                  json.dumps(merged_owner, ensure_ascii=False),
+                 review.get("owner_date", "") or existing.get("owner_response_date", ""),  # <-- new
                  now, session_id, session_id,
                  new_content_hash, new_engagement_hash,
                  review_id, place_id, old_version)
             )
+
             self.backend.commit()
 
             if result.rowcount > 0:
@@ -1029,14 +1035,9 @@ class ReviewDB:
         """Build owner responses dict from a raw review."""
         owner_text = review.get("owner_text", "")
         if owner_text:
-            from modules.utils import detect_lang, parse_date_to_iso
+            from modules.utils import detect_lang
             lang = detect_lang(owner_text)
-            raw_date = review.get("owner_date", "")
-            iso_date = parse_date_to_iso(raw_date) if raw_date else ""
-            return {lang: {
-                "text": owner_text,
-                "date": iso_date,
-            }}
+            return {lang: {"text": owner_text}}
         return {}
     
     @staticmethod
@@ -1045,8 +1046,8 @@ class ReviewDB:
         return review.get("owner_text", "")
 
 
-# Migration definitions (version -> list of DDL statements)
 _MIGRATIONS: Dict[int, List[str]] = {
-    # Future migrations go here:
-    # 2: ["ALTER TABLE reviews ADD COLUMN new_field TEXT;"],
+    2: [
+        "ALTER TABLE reviews ADD COLUMN owner_response_date TEXT;",
+    ],
 }
