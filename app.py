@@ -23,7 +23,7 @@ def to_est_date(utc_str):
             dt = pytz.utc.localize(dt)
         return dt.astimezone(EST).strftime("%d-%b-%Y")
     except Exception:
-        return utc_str 
+        return utc_str
 
 
 def extract_text(field, lang="en"):
@@ -50,13 +50,13 @@ def load_reviews(db_path):
     cur.execute("PRAGMA table_info(reviews)")
     cols = {row[1] for row in cur.fetchall()}
 
-    text_col       = "review_text"     if "review_text"     in cols else "description"
-    owner_text_col = "owner_responses" if "owner_responses" in cols else "owner_reply"
+    text_col       = "review_text"         if "review_text"         in cols else "description"
+    owner_text_col = "owner_responses"     if "owner_responses"     in cols else "owner_reply"
     owner_date_col = "owner_response_date" if "owner_response_date" in cols else "last_modified"
-    rating_col     = "rating"          if "rating"          in cols else "stars"
-    date_col       = "review_date"     if "review_date"     in cols else "date"
-    deleted_col    = "is_deleted"      if "is_deleted"      in cols else None
-    params_col     = "custom_params"   if "custom_params"   in cols else None
+    rating_col     = "rating"              if "rating"              in cols else "stars"
+    date_col       = "review_date"         if "review_date"         in cols else "date"
+    deleted_col    = "is_deleted"          if "is_deleted"          in cols else None
+    params_col     = "custom_params"       if "custom_params"       in cols else None
 
     where = f"WHERE r.{deleted_col} = 0" if deleted_col else ""
 
@@ -88,7 +88,6 @@ def build_dataframe(rows):
         except Exception:
             pass
 
-        # Parse owner_responses JSON to get text only
         owner_text = None
         try:
             owner_data = json.loads(r["owner_responses"]) if r["owner_responses"] else {}
@@ -113,10 +112,31 @@ def build_dataframe(rows):
     return pd.DataFrame(records)
 
 
+def prepare_export(df):
+    """Drop 'name', reorder, and rename columns for the Excel export."""
+    export = df[[
+        "review_date",
+        "review_rating",
+        "author_title",
+        "review_text",
+        "owner_answer_date",
+        "owner_answer",
+    ]].rename(columns={
+        "review_date":       "Review Date",
+        "review_rating":     "Review Stars",
+        "author_title":      "Reviewer",
+        "review_text":       "Review Text",
+        "owner_answer_date": "VCS Reply Date",
+        "owner_answer":      "VCS Reply",
+    })
+    return export
+
+
 def to_excel(df):
     buf = BytesIO()
+    export = prepare_export(df)
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Reviews")
+        export.to_excel(writer, index=False, sheet_name="Reviews")
         ws = writer.sheets["Reviews"]
         for col in ws.columns:
             max_len = max((len(str(c.value)) for c in col if c.value), default=10)
@@ -176,10 +196,10 @@ def get_workflow_status():
             if runs:
                 run = runs[0]
                 return {
-                    "status": run.get("status"),
+                    "status":     run.get("status"),
                     "conclusion": run.get("conclusion"),
-                    "started": run.get("created_at"),
-                    "url": run.get("html_url"),
+                    "started":    run.get("created_at"),
+                    "url":        run.get("html_url"),
                 }
     except Exception:
         pass
@@ -212,7 +232,7 @@ if st.button("Run Scrape Now", type="primary"):
 
 if st.session_state.get("polling"):
     status_placeholder = st.empty()
-    for _ in range(72):  # poll up to 6 minutes (72 x 5s)
+    for _ in range(72):
         info = get_workflow_status()
         if info:
             s = info["status"]
@@ -235,7 +255,7 @@ if st.session_state.get("polling"):
         st.session_state["polling"] = False
         st.warning("Scrape is taking longer than expected. Refresh the page manually in a few minutes.")
 
-# ── Load data (required for steps 2 & 3) ────────────────────────────────────
+# ── Load data ────────────────────────────────────────────────────────────────
 try:
     rows = load_reviews(DB_PATH)
     df   = build_dataframe(rows)
@@ -243,7 +263,6 @@ try:
     df["_year"]    = df["_date"].dt.year
     df["_quarter"] = df["_date"].dt.quarter
 
-    # Last scrape time
     last_scrape = get_last_scrape_time(DB_PATH)
     if last_scrape:
         try:
@@ -277,6 +296,7 @@ try:
 
         quarter_names = {1: "Q1 (Jan-Mar)", 2: "Q2 (Apr-Jun)", 3: "Q3 (Jul-Sep)", 4: "Q4 (Oct-Dec)"}
         selected_q = col_q.selectbox("Quarter", ["All"] + [quarter_names[q] for q in available_quarters])
+        st.caption("\\* If no reviews were submitted in a given year-quarter, the year-quarter combination will not be available via dropdown selection")
 
         q_map = {v: k for k, v in quarter_names.items()}
         if selected_year == "All" and selected_q == "All":
@@ -314,11 +334,6 @@ try:
         file_name=filename,
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
-
-    # Preview
-    st.divider()
-    with st.expander("Preview data", expanded=False):
-        st.dataframe(filtered, use_container_width=True)
 
 except Exception as e:
     st.error(f"Could not load database: {e}")
