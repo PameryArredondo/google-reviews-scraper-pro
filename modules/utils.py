@@ -430,3 +430,32 @@ def click_if(driver: Chrome, css: str, delay: float = .25, timeout: float = 5.0)
 def get_current_iso_date() -> str:
     """Return current UTC time in ISO format."""
     return datetime.now(timezone.utc).isoformat()
+
+
+def poll_timestamp_responses(driver: Chrome, ts_cache: Dict[str, str]) -> None:
+    """
+    Poll CDP performance logs for listugcposts responses and update ts_cache.
+    Call this inside the scroll loop after each scroll.
+    """
+    try:
+        logs = driver.get_log("performance")
+        for entry in logs:
+            try:
+                msg = json.loads(entry["message"])["message"]
+                if msg.get("method") != "Network.responseReceived":
+                    continue
+                url = msg.get("params", {}).get("response", {}).get("url", "")
+                if "listugcposts" not in url:
+                    continue
+                request_id = msg["params"]["requestId"]
+                body = driver.execute_cdp_cmd(
+                    "Network.getResponseBody", {"requestId": request_id}
+                )
+                batch = _parse_listugcposts(body.get("body", ""))
+                if batch:
+                    ts_cache.update(batch)
+                    log.debug(f"Polled {len(batch)} timestamps, total {len(ts_cache)}")
+            except Exception:
+                continue
+    except Exception as e:
+        log.debug(f"CDP poll error: {e}")
