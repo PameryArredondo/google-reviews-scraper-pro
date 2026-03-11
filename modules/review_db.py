@@ -1029,14 +1029,16 @@ class ReviewDB:
         """Build owner responses dict from a raw review."""
         owner_text = review.get("owner_text", "")
         if owner_text:
-            from modules.utils import detect_lang
+            from modules.utils import detect_lang, parse_date_to_iso
             lang = detect_lang(owner_text)
+            raw_date = review.get("owner_date", "")
+            iso_date = parse_date_to_iso(raw_date) if raw_date else ""
             return {lang: {
                 "text": owner_text,
-                "date": review.get("owner_date", ""),
+                "date": iso_date,
             }}
         return {}
-
+    
     @staticmethod
     def _extract_owner_text(review: Dict[str, Any]) -> str:
         """Extract owner response text for hash computation."""
