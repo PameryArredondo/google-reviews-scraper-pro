@@ -262,11 +262,6 @@ try:
     else:
         st.caption("📅 Last scraped: unknown")
 
-    # Full-dataset stats (only shown after a scrape has completed)
-    if last_scrape:
-        st.divider()
-        show_stats(df, label="All Reviews")
-
     # ── Step 2: Date filter ──────────────────────────────────────────────────
     st.divider()
     st.subheader("Step 2: Apply Date Filter for Export")
