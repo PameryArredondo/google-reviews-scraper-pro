@@ -6,12 +6,14 @@ import pytz
 import json
 from io import BytesIO
 import requests
-import subprocess
 from packaging.version import Version
 
 DB_PATH = "reviews.db"
 LOCAL_VERSION = "1.2.1"
 GITHUB_REPO = "georgekhananaev/google-reviews-scraper-pro"
+GITHUB_OWNER = "PameryArredondo"       # ← your GitHub username
+GITHUB_SCRAPER_REPO = "YOUR_REPO"     # ← your scraper repo name
+GITHUB_WORKFLOW = "scrape.yml"
 EST = pytz.timezone("America/New_York")
 
 
@@ -63,13 +65,13 @@ def load_reviews(db_path):
     cur.execute("PRAGMA table_info(reviews)")
     cols = {row[1] for row in cur.fetchall()}
 
-    text_col       = "review_text"    if "review_text"    in cols else "description"
+    text_col       = "review_text"     if "review_text"     in cols else "description"
     owner_text_col = "owner_responses" if "owner_responses" in cols else "owner_reply"
-    owner_date_col = "last_modified"  if "last_modified"  in cols else "owner_response_date"
-    rating_col     = "rating"         if "rating"         in cols else "stars"
-    date_col       = "review_date"    if "review_date"    in cols else "date"
-    deleted_col    = "is_deleted"     if "is_deleted"     in cols else None
-    params_col     = "custom_params"  if "custom_params"  in cols else None
+    owner_date_col = "last_modified"   if "last_modified"   in cols else "owner_response_date"
+    rating_col     = "rating"          if "rating"          in cols else "stars"
+    date_col       = "review_date"     if "review_date"     in cols else "date"
+    deleted_col    = "is_deleted"      if "is_deleted"      in cols else None
+    params_col     = "custom_params"   if "custom_params"   in cols else None
 
     where = f"WHERE r.{deleted_col} = 0" if deleted_col else ""
 
@@ -101,7 +103,7 @@ def build_dataframe(rows):
         except Exception:
             pass
 
-        owner_text    = extract_text(r["owner_responses"])
+        owner_text     = extract_text(r["owner_responses"])
         owner_date_utc = r["owner_response_date"]
 
         records.append({
@@ -160,10 +162,99 @@ def check_scraper_version():
     return None, None
 
 
+def trigger_github_scrape():
+    """Trigger workflow_dispatch on GitHub Actions."""
+    token = st.secrets.get("GITHUB_TOKEN")
+    if not token:
+        return False, "GITHUB_TOKEN not found in Streamlit secrets."
+    resp = requests.post(
+        f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_SCRAPER_REPO}/actions/workflows/{GITHUB_WORKFLOW}/dispatches",
+        headers={
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github+json"
+        },
+        json={"ref": "main"}
+    )
+    if resp.status_code == 204:
+        return True, None
+    return False, f"GitHub API returned {resp.status_code}: {resp.text}"
+
+
+def get_workflow_status():
+    """Check the status of the most recent scrape workflow run."""
+    token = st.secrets.get("GITHUB_TOKEN")
+    if not token:
+        return None
+    try:
+        resp = requests.get(
+            f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_SCRAPER_REPO}/actions/workflows/{GITHUB_WORKFLOW}/runs?per_page=1",
+            headers={
+                "Authorization": f"token {token}",
+                "Accept": "application/vnd.github+json"
+            },
+            timeout=5
+        )
+        if resp.status_code == 200:
+            runs = resp.json().get("workflow_runs", [])
+            if runs:
+                run = runs[0]
+                return {
+                    "status": run.get("status"),        # queued, in_progress, completed
+                    "conclusion": run.get("conclusion"), # success, failure, None
+                    "started": run.get("created_at"),
+                    "url": run.get("html_url"),
+                }
+    except Exception:
+        pass
+    return None
+
+
 # ── UI ───────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Google Reviews Export", page_icon="⭐", layout="centered")
 st.title("⭐ Google Reviews Export")
-st.caption("Automatically scraped from Google Maps via GitHub Actions every Monday and Friday at 8:15 AM EST — no manual steps required. The scraper runs in the cloud, updates the database, and commits it back to the repo. This dashboard reads that database and exports it to Excel.")
+st.caption(
+    "Automatically scraped from Google Maps via GitHub Actions every Monday and Friday "
+    "at 8:15 AM EST — no manual steps required. The scraper runs in the cloud, updates "
+    "the database, and commits it back to the repo. This dashboard reads that database "
+    "and exports it to Excel."
+)
+
+# ── On-Demand Scrape ─────────────────────────────────────────────────────────
+st.divider()
+st.subheader("🔄 On-Demand Scrape")
+st.caption("Trigger a scrape outside of the scheduled Monday/Friday runs.")
+
+run_col, status_col = st.columns([1, 2])
+
+with run_col:
+    if st.button("▶️ Run Scrape Now", type="primary"):
+        with st.spinner("Triggering scrape..."):
+            ok, err = trigger_github_scrape()
+        if ok:
+            st.success("Scrape triggered! Check status →")
+        else:
+            st.error(f"Failed to trigger: {err}")
+
+with status_col:
+    if st.button("🔍 Check Status"):
+        info = get_workflow_status()
+        if info:
+            s = info["status"]
+            c = info["conclusion"]
+            if s == "completed" and c == "success":
+                st.success(f"✅ Last run completed successfully. [View run]({info['url']})")
+            elif s == "in_progress":
+                st.info(f"⏳ Scrape is currently running... [View run]({info['url']})")
+            elif s == "queued":
+                st.info(f"🕐 Scrape is queued. [View run]({info['url']})")
+            elif s == "completed" and c == "failure":
+                st.error(f"❌ Last run failed. [View run]({info['url']})")
+            else:
+                st.info(f"Status: {s} / {c}")
+        else:
+            st.warning("Could not retrieve workflow status.")
+
+st.divider()
 
 # Version check
 is_outdated, latest = check_scraper_version()
@@ -199,9 +290,9 @@ try:
     avg_rating  = df["review_rating"].mean()
     has_owner   = df["owner_answer"].notna() & (df["owner_answer"] != "")
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total Reviews",    len(df))
-    col2.metric("Average Rating",   f"{avg_rating:.2f} ⭐")
-    col3.metric("Owner Responses",  has_owner.sum())
+    col1.metric("Total Reviews",   len(df))
+    col2.metric("Average Rating",  f"{avg_rating:.2f} ⭐")
+    col3.metric("Owner Responses", has_owner.sum())
 
     # Per-star breakdown
     st.divider()
