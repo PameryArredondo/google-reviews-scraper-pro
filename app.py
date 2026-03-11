@@ -213,6 +213,7 @@ def get_workflow_status():
 st.set_page_config(page_title="Google Reviews Export", page_icon="⭐", layout="centered")
 st.title("⭐ Google Reviews Export")
 st.write(st.secrets.get("GITHUB_TOKEN", "NOT FOUND")[:10])
+st.write(f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_SCRAPER_REPO}/actions/workflows/244378066/dispatches")
 st.caption(
     "Automatically scraped from Google Maps via GitHub Actions every Monday and Friday "
     "at 8:15 AM EST — no manual steps required. The scraper runs in the cloud, updates "
