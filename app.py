@@ -21,7 +21,7 @@ def to_est_date(utc_str):
         dt = datetime.fromisoformat(utc_str.replace("Z", "+00:00"))
         if dt.tzinfo is None:
             dt = pytz.utc.localize(dt)
-        return dt.astimezone(EST).strftime("%d/%m/%Y")
+        return dt.astimezone(EST).strftime("%d-%b-%Y")
     except Exception:
         return None
 
