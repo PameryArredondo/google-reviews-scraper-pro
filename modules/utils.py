@@ -328,55 +328,49 @@ def _parse_listugcposts(response_text: str) -> Dict[str, str]:
 
 def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, str]:
     """
-    Attach a CDP Network listener to the driver that captures exact review
-    dates from Google Maps' listugcposts API responses.
+    Inject a JS XHR interceptor via CDP that captures listugcposts timestamps
+    into window._reviewTimestamps. Compatible with SeleniumBase UC Mode.
 
     Call this ONCE immediately after setup_driver(), before any navigation.
-
-    Returns a shared dict that is populated in-place as reviews load.
-    The dict maps review_id (str) -> ISO date string (str, e.g. "2026-03-06").
-    Pass this dict into RawReview.from_card() or the scrape loop to look up
-    exact dates by review ID instead of parsing relative strings.
-
-    Usage:
-        driver = self.setup_driver(headless)
-        ts_cache = attach_timestamp_interceptor(driver)
-        # ... navigate, scroll reviews ...
-        # ts_cache is now populated with review_id -> date entries
-        exact_date = ts_cache.get(review_id)  # "2026-03-06" or None
+    Returns a shared dict that poll_timestamp_responses() will populate.
     """
     ts_cache: Dict[str, str] = {}
-
     try:
-        driver.execute_cdp_cmd("Network.enable", {})
-
-        def on_response(event: Dict[str, Any]) -> None:
-            url = event.get("response", {}).get("url", "")
-            if "listugcposts" not in url:
-                return
-            request_id = event.get("requestId")
-            if not request_id:
-                return
-            try:
-                body = driver.execute_cdp_cmd(
-                    "Network.getResponseBody", {"requestId": request_id}
-                )
-                text = body.get("body", "")
-                if not text:
-                    return
-                batch = _parse_listugcposts(text)
-                ts_cache.update(batch)
-                log.debug(f"listugcposts: captured {len(batch)} timestamps, total {len(ts_cache)}")
-            except Exception as e:
-                log.debug(f"CDP response capture error: {e}")
-
-        driver.add_cdp_listener("Network.responseReceived", on_response)
-        log.info("CDP timestamp interceptor attached")
-
+        driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+            'source': '''
+                window._reviewTimestamps = {};
+                const _origOpen = XMLHttpRequest.prototype.open;
+                XMLHttpRequest.prototype.open = function(method, url) {
+                    this._url = url;
+                    this.addEventListener('load', function() {
+                        if (this._url && this._url.includes('listugcposts')) {
+                            try {
+                                const clean = this.responseText.replace(/^\\)\\]\\}'\\n/, '');
+                                const parsed = JSON.parse(clean);
+                                const reviews = parsed[2];
+                                if (!reviews) return;
+                                reviews.forEach(r => {
+                                    try {
+                                        const inner = r[0];
+                                        if (!inner) return;
+                                        const rid = inner[0];
+                                        const ts = inner[1] && inner[1][2];
+                                        if (rid && ts) {
+                                            const d = new Date(ts / 1000);
+                                            window._reviewTimestamps[rid] = d.toISOString().split('T')[0];
+                                        }
+                                    } catch(e) {}
+                                });
+                            } catch(e) {}
+                        }
+                    });
+                    return _origOpen.apply(this, arguments);
+                };
+            '''
+        })
+        log.info("JS timestamp interceptor injected")
     except Exception as e:
-        log.warning(f"Could not attach CDP timestamp interceptor: {e}. "
-                    f"Falling back to relative date parsing.")
-
+        log.warning(f"Could not inject JS timestamp interceptor: {e}")
     return ts_cache
 
 
@@ -434,28 +428,15 @@ def get_current_iso_date() -> str:
 
 def poll_timestamp_responses(driver: Chrome, ts_cache: Dict[str, str]) -> None:
     """
-    Poll CDP performance logs for listugcposts responses and update ts_cache.
-    Call this inside the scroll loop after each scroll.
+    Read timestamps captured by the JS interceptor from window._reviewTimestamps
+    into ts_cache. Call this inside the scroll loop on each iteration.
     """
     try:
-        logs = driver.get_log("performance")
-        for entry in logs:
-            try:
-                msg = json.loads(entry["message"])["message"]
-                if msg.get("method") != "Network.responseReceived":
-                    continue
-                url = msg.get("params", {}).get("response", {}).get("url", "")
-                if "listugcposts" not in url:
-                    continue
-                request_id = msg["params"]["requestId"]
-                body = driver.execute_cdp_cmd(
-                    "Network.getResponseBody", {"requestId": request_id}
-                )
-                batch = _parse_listugcposts(body.get("body", ""))
-                if batch:
-                    ts_cache.update(batch)
-                    log.debug(f"Polled {len(batch)} timestamps, total {len(ts_cache)}")
-            except Exception:
-                continue
+        data = driver.execute_script("return window._reviewTimestamps || {};")
+        if data:
+            new = {k: v for k, v in data.items() if k not in ts_cache}
+            if new:
+                ts_cache.update(new)
+                log.debug(f"JS poll: {len(new)} new timestamps, total {len(ts_cache)}")
     except Exception as e:
-        log.debug(f"CDP poll error: {e}")
+        log.debug(f"JS poll error: {e}")
