@@ -1,3 +1,4 @@
+import time
 import streamlit as st
 import sqlite3
 import pandas as pd
@@ -6,14 +7,10 @@ import pytz
 import json
 from io import BytesIO
 import requests
-from packaging.version import Version
 
 DB_PATH = "reviews.db"
-LOCAL_VERSION = "1.2.1"
-GITHUB_REPO = "georgekhananaev/google-reviews-scraper-pro"
 GITHUB_OWNER = "PameryArredondo"
 GITHUB_SCRAPER_REPO = "google-reviews-scraper-pro"
-GITHUB_WORKFLOW = "scrape.yml"
 EST = pytz.timezone("America/New_York")
 
 
@@ -28,17 +25,6 @@ def to_est_date(utc_str):
     except Exception:
         return None
 
-
-def to_utc_str(utc_str):
-    if not utc_str:
-        return None
-    try:
-        dt = datetime.fromisoformat(utc_str.replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = pytz.utc.localize(dt)
-        return dt.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    except Exception:
-        return utc_str
 
 
 def extract_text(field, lang="en"):
@@ -107,15 +93,13 @@ def build_dataframe(rows):
         owner_date_utc = r["owner_response_date"]
 
         records.append({
-            "name":                                          name,
-            "author_title":                                  r["author"],
-            "review_text":                                   extract_text(r["description"]),
-            "owner_answer":                                  owner_text,
-            "owner_answer_timestamp_datetime_EST DATE ONLY": to_est_date(owner_date_utc),
-            "owner_answer_timestamp_datetime_utc":           to_utc_str(owner_date_utc),
-            "review_rating":                                 r["rating"],
-            "review_datetime_EST DATE ONLY":                 to_est_date(r["review_date"]),
-            "review_datetime_utc":                           to_utc_str(r["review_date"]),
+            "name":               name,
+            "author_title":       r["author"],
+            "review_text":        extract_text(r["description"]),
+            "owner_answer":       owner_text,
+            "owner_answer_date":  to_est_date(owner_date_utc),
+            "review_rating":      r["rating"],
+            "review_date":        to_est_date(r["review_date"]),
         })
     return pd.DataFrame(records)
 
@@ -148,22 +132,7 @@ def get_last_scrape_time(db_path):
         return None
 
 
-def check_scraper_version():
-    try:
-        r = requests.get(
-            f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
-            timeout=5
-        )
-        if r.status_code == 200:
-            latest = r.json().get("tag_name", "").lstrip("v")
-            return Version(latest) > Version(LOCAL_VERSION), latest
-    except Exception:
-        pass
-    return None, None
-
-
 def trigger_github_scrape():
-    """Trigger workflow_dispatch on GitHub Actions."""
     token = st.secrets.get("GITHUB_TOKEN")
     if not token:
         return False, "GITHUB_TOKEN not found in Streamlit secrets."
@@ -181,7 +150,6 @@ def trigger_github_scrape():
 
 
 def get_workflow_status():
-    """Check the status of the most recent scrape workflow run."""
     token = st.secrets.get("GITHUB_TOKEN")
     if not token:
         return None
@@ -199,8 +167,8 @@ def get_workflow_status():
             if runs:
                 run = runs[0]
                 return {
-                    "status": run.get("status"),        # queued, in_progress, completed
-                    "conclusion": run.get("conclusion"), # success, failure, None
+                    "status": run.get("status"),
+                    "conclusion": run.get("conclusion"),
                     "started": run.get("created_at"),
                     "url": run.get("html_url"),
                 }
@@ -218,37 +186,39 @@ st.caption("Auto-scraped from Google Maps every Monday and Friday at 8:15 AM EST
 st.divider()
 st.caption("Trigger a scrape outside of the scheduled Monday/Friday runs.")
 
-run_col, status_col = st.columns([1, 2])
+if st.button("Run Scrape Now", type="primary"):
+    with st.spinner("Triggering scrape..."):
+        ok, err = trigger_github_scrape()
+    if ok:
+        st.session_state["polling"] = True
+        st.rerun()
+    else:
+        st.error(f"Failed to trigger: {err}")
 
-with run_col:
-    if st.button("Run Scrape Now", type="primary"):
-        with st.spinner("Triggering scrape..."):
-            ok, err = trigger_github_scrape()
-        if ok:
-            st.success("Scrape triggered!")
-            st.session_state["check_status"] = True
-        else:
-            st.error(f"Failed to trigger: {err}")
-
-with status_col:
-    if st.button("Check Status") or st.session_state.get("check_status"):
-        st.session_state["check_status"] = False
+if st.session_state.get("polling"):
+    status_placeholder = st.empty()
+    for _ in range(72):  # poll up to 6 minutes (72 x 5s)
         info = get_workflow_status()
         if info:
             s = info["status"]
             c = info["conclusion"]
-            if s == "completed" and c == "success":
-                st.success(f"✅ Last run completed successfully. [View run]({info['url']})")
+            if s == "queued":
+                status_placeholder.info("Setting up environment — installing dependencies in the background...")
             elif s == "in_progress":
-                st.info(f"Scrape is currently running... [View run]({info['url']})")
-            elif s == "queued":
-                st.info(f"Setting up environment — installing dependencies in the background. [View run]({info['url']})")
-            elif s == "completed" and c == "failure":
-                st.error(f"❌ Last run failed. [View run]({info['url']})")
-            else:
-                st.info(f"Status: {s} / {c}")
-        else:
-            st.warning("Could not retrieve workflow status.")
+                status_placeholder.info("Scrape is running... this usually takes 2–3 minutes.")
+            elif s == "completed":
+                st.session_state["polling"] = False
+                if c == "success":
+                    status_placeholder.success("✅ Scrape completed! Refreshing data...")
+                    time.sleep(2)
+                    st.rerun()
+                else:
+                    status_placeholder.error(f"❌ Scrape failed. [View run]({info['url']})")
+                break
+        time.sleep(5)
+    else:
+        st.session_state["polling"] = False
+        st.warning("Scrape is taking longer than expected. Refresh the page manually in a few minutes.")
 
 st.divider()
 
@@ -271,7 +241,7 @@ try:
         st.caption("📅 Last scraped: unknown")
 
     # Summary metrics
-    df["_date"] = pd.to_datetime(df["review_datetime_EST DATE ONLY"], format="%d/%m/%Y", errors="coerce")
+    df["_date"] = pd.to_datetime(df["review_date"], format="%d/%m/%Y", errors="coerce")
     avg_rating  = df["review_rating"].mean()
     has_owner   = df["owner_answer"].notna() & (df["owner_answer"] != "")
     col1, col2, col3 = st.columns(3)
