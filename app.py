@@ -129,6 +129,9 @@ def prepare_export(df):
         "owner_answer_date": "VCS Reply Date",
         "owner_answer":      "VCS Reply",
     })
+    export["Review Date"] = pd.to_datetime(export["Review Date"], format="%d-%b-%Y", errors="coerce")
+    export = export.sort_values("Review Date", ascending=True).reset_index(drop=True)
+    export["Review Date"] = export["Review Date"].dt.strftime("%d-%b-%Y")
     return export
 
 
@@ -296,7 +299,7 @@ try:
 
         quarter_names = {1: "Q1 (Jan-Mar)", 2: "Q2 (Apr-Jun)", 3: "Q3 (Jul-Sep)", 4: "Q4 (Oct-Dec)"}
         selected_q = col_q.selectbox("Quarter", ["All"] + [quarter_names[q] for q in available_quarters])
-        st.caption("\\* If no reviews were submitted in a given year-quarter, the year-quarter combination will not be available via dropdown selection")
+        st.caption("\\* If no reviews were submitted in a given year-quarter, that combination will not appear in the dropdowns.")
 
         q_map = {v: k for k, v in quarter_names.items()}
         if selected_year == "All" and selected_q == "All":
