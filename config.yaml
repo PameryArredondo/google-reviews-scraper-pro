@@ -1,4 +1,4 @@
-backup_to_json: true
+backup_to_json: false
 convert_dates: true
 db_path: reviews.db
 download_images: false
@@ -6,15 +6,14 @@ headless: true
 json_path: google_reviews.json
 log_level: INFO
 max_reviews: 0
-max_scroll_attempts: 100
+max_scroll_attempts: 50
 preserve_original_urls: true
-scrape_mode: full
-scroll_idle_limit: 30
+scrape_mode: update
+scroll_idle_limit: 10
 sort_by: newest
-stop_threshold: 0
-store_local_paths: true
+stop_threshold: 3
+store_local_paths: false
 use_mongodb: false
-
 businesses:
   - url: 'https://www.google.com/maps/place/Validated+Claim+Support/@40.928312,-73.9369773,20z/data=!3m1!5s0x89c2fa0350b2533f:0x35c38163899d309b!4m18!1m9!3m8!1s0x89c2f70e34150509:0x8e0802c97d8f73cc!2sValidated+Claim+Support!8m2!3d40.8725539!4d-74.0060502!9m1!1b1!16s%2Fg%2F11fn1rmh8n!3m7!1s0x89c2f70e34150509:0x8e0802c97d8f73cc!8m2!3d40.8725539!4d-74.0060502!9m1!1b1!16s%2Fg%2F11fn1rmh8n?entry=ttu&g_ep=EgoyMDI2MDMwOS4wIKXMDSoASAFQAw%3D%3D'
     custom_params:
