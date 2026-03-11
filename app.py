@@ -11,8 +11,8 @@ from packaging.version import Version
 DB_PATH = "reviews.db"
 LOCAL_VERSION = "1.2.1"
 GITHUB_REPO = "georgekhananaev/google-reviews-scraper-pro"
-GITHUB_OWNER = "PameryArredondo"       # ← your GitHub username
-GITHUB_SCRAPER_REPO = "YOUR_REPO"     # ← your scraper repo name
+GITHUB_OWNER = "PameryArredondo"
+GITHUB_SCRAPER_REPO = "google-reviews-scraper-pro"
 GITHUB_WORKFLOW = "scrape.yml"
 EST = pytz.timezone("America/New_York")
 
