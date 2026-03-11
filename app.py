@@ -227,7 +227,7 @@ st.caption("Trigger a scrape outside of the scheduled Monday/Friday runs.")
 run_col, status_col = st.columns([1, 2])
 
 with run_col:
-    if st.button("▶️ Run Scrape Now", type="primary"):
+    if st.button("Run Scrape Now", type="primary"):
         with st.spinner("Triggering scrape..."):
             ok, err = trigger_github_scrape()
         if ok:
@@ -236,7 +236,7 @@ with run_col:
             st.error(f"Failed to trigger: {err}")
 
 with status_col:
-    if st.button("🔍 Check Status"):
+    if st.button("Check Status"):
         info = get_workflow_status()
         if info:
             s = info["status"]
@@ -244,9 +244,9 @@ with status_col:
             if s == "completed" and c == "success":
                 st.success(f"✅ Last run completed successfully. [View run]({info['url']})")
             elif s == "in_progress":
-                st.info(f"⏳ Scrape is currently running... [View run]({info['url']})")
+                st.info(f"Scrape is currently running... [View run]({info['url']})")
             elif s == "queued":
-                st.info(f"🕐 Scrape is queued. [View run]({info['url']})")
+                st.info(f"Setting up environment — installing dependencies in the background. [View run]({info['url']})")
             elif s == "completed" and c == "failure":
                 st.error(f"❌ Last run failed. [View run]({info['url']})")
             else:
