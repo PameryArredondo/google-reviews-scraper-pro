@@ -256,17 +256,6 @@ with status_col:
 
 st.divider()
 
-# Version check
-is_outdated, latest = check_scraper_version()
-if is_outdated:
-    st.warning(
-        f"⚠️ Scraper update available (v{latest}). Update before your next scrape.",
-        icon="⚠️"
-    )
-    st.link_button("⬇️ Download Latest Version", f"https://github.com/{GITHUB_REPO}/releases/latest")
-elif is_outdated is None:
-    st.info("Could not check for scraper updates — GitHub may be unreachable.", icon="ℹ️")
-
 try:
     rows = load_reviews(DB_PATH)
     df   = build_dataframe(rows)
