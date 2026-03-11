@@ -176,6 +176,21 @@ def get_workflow_status():
     return None
 
 
+def show_stats(df, label=""):
+    avg_rating = df["review_rating"].mean()
+    has_owner  = df["owner_answer"].notna() & (df["owner_answer"] != "")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Reviews",   len(df))
+    col2.metric("Average Rating",  f"{avg_rating:.2f} ⭐")
+    col3.metric("Owner Responses", has_owner.sum())
+
+    st.subheader("Rating Breakdown")
+    star_cols = st.columns(5)
+    for i, star in enumerate(range(5, 0, -1)):
+        count = (df["review_rating"] == star).sum()
+        star_cols[i].metric(f"{'⭐' * star}", f"{count}")
+
+
 # ── UI ───────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Google Reviews Export", page_icon="⭐", layout="centered")
 st.markdown("""
@@ -186,11 +201,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 st.title("⭐ Google Reviews Export")
-st.caption("Auto-scraped from Google Maps every Monday and Friday at 8:15 AM EST. Export to Excel below.")
 
-# ── On-Demand Scrape ─────────────────────────────────────────────────────────
+# ── Step 1: Scrape ───────────────────────────────────────────────────────────
 st.divider()
-st.caption("Trigger a scrape outside of the scheduled Monday/Friday runs.")
+st.subheader("Step 1: Click 'Run Scrape Now'")
 
 if st.button("Run Scrape Now", type="primary"):
     with st.spinner("Triggering scrape..."):
@@ -226,11 +240,13 @@ if st.session_state.get("polling"):
         st.session_state["polling"] = False
         st.warning("Scrape is taking longer than expected. Refresh the page manually in a few minutes.")
 
-st.divider()
-
+# ── Load data (required for steps 2 & 3) ────────────────────────────────────
 try:
     rows = load_reviews(DB_PATH)
     df   = build_dataframe(rows)
+    df["_date"]    = pd.to_datetime(df["review_date"], format="%d-%b-%Y", errors="coerce")
+    df["_year"]    = df["_date"].dt.year
+    df["_quarter"] = df["_date"].dt.quarter
 
     # Last scrape time
     last_scrape = get_last_scrape_time(DB_PATH)
@@ -246,31 +262,16 @@ try:
     else:
         st.caption("📅 Last scraped: unknown")
 
-    # Summary metrics
-    df["_date"] = pd.to_datetime(df["review_date"], format="%d/%m/%Y", errors="coerce")
-    avg_rating  = df["review_rating"].mean()
-    has_owner   = df["owner_answer"].notna() & (df["owner_answer"] != "")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Reviews",   len(df))
-    col2.metric("Average Rating",  f"{avg_rating:.2f} ⭐")
-    col3.metric("Owner Responses", has_owner.sum())
+    # Full-dataset stats (only shown after a scrape has completed)
+    if last_scrape:
+        st.divider()
+        show_stats(df, label="All Reviews")
 
-    # Per-star breakdown
+    # ── Step 2: Date filter ──────────────────────────────────────────────────
     st.divider()
-    st.subheader("Rating Breakdown")
-    star_cols = st.columns(5)
-    for i, star in enumerate(range(5, 0, -1)):
-        count = (df["review_rating"] == star).sum()
-        pct   = (count / len(df) * 100) if len(df) else 0
-        star_cols[i].metric(f"{'⭐' * star}", f"{count}", delta=f"{pct:.1f}%", delta_color="off")
+    st.subheader("Step 2: Apply Date Filter for Export")
 
-    # Date filter
-    st.divider()
-    st.subheader("Filter by Date Range")
-
-    df["_year"]    = df["_date"].dt.year
-    df["_quarter"] = df["_date"].dt.quarter
-    available      = df[["_year", "_quarter"]].dropna().drop_duplicates()
+    available       = df[["_year", "_quarter"]].dropna().drop_duplicates()
     available_years = sorted(available["_year"].unique(), reverse=True)
 
     filter_mode = st.radio("Filter by", ["Quarter", "Custom date range"], horizontal=True)
@@ -307,10 +308,17 @@ try:
         fname_tag = f"{date_from.strftime('%d%m%Y')}_to_{date_to.strftime('%d%m%Y')}"
 
     filtered = filtered.drop(columns=["_date", "_year", "_quarter"])
-    st.caption(f"{len(filtered)} of {len(df)} reviews match the selection.")
 
-    # Download
+    # Filtered stats
+    if last_scrape:
+        st.divider()
+        st.caption(f"{len(filtered)} of {len(df)} reviews match the selection.")
+        show_stats(filtered, label="Filtered Reviews")
+
+    # ── Step 3: Export ───────────────────────────────────────────────────────
     st.divider()
+    st.subheader("Step 3: Click Export to Download Excel File")
+
     filename = f"google_reviews_{fname_tag}.xlsx"
     st.download_button(
         label="⬇️ Download Excel",
@@ -319,7 +327,7 @@ try:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
-    # Preview — full dataset, always at the bottom
+    # Preview
     st.divider()
     with st.expander("Preview data", expanded=False):
         st.dataframe(filtered, use_container_width=True)
