@@ -1484,7 +1484,12 @@ class GoogleReviewsScraper:
                             log.info("Reached max_reviews limit (%d), stopping.", max_reviews)
                             idle = 999
                             break
-
+                    # ── late-arriving timestamp patch ──────────────────────
+                    poll_timestamp_responses(driver, ts_cache)
+                    for rid in list(processed_ids):
+                        if rid in ts_cache:
+                            self.review_db.update_review_date(place_id, rid, ts_cache[rid])
+                            
                     # Batch-level stop: entire scroll iteration was unchanged.
                     # Require min 3 reviews in the batch to avoid false stops
                     # from tiny tail batches during lazy loading.

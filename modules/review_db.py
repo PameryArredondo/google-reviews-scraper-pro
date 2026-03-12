@@ -903,6 +903,16 @@ class ReviewDB:
             return True
         return False
 
+    def update_review_date(self, place_id: str, review_id: str, date_str: str) -> None:
+        """Patch review_date for a single review if a better timestamp arrived late."""
+        self.backend.execute(
+            """UPDATE reviews SET review_date = ?
+               WHERE place_id = ? AND review_id = ?
+               AND (review_date IS NULL OR review_date = '')""",
+            (date_str, place_id, review_id)
+        )
+        self.backend.commit()
+
     # === Sync Checkpoints ===
 
     def get_sync_checkpoint(self, place_id: str, target: str) -> Optional[Dict]:
