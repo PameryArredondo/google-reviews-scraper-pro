@@ -329,7 +329,8 @@ def _parse_listugcposts(response_text: str) -> Dict[str, str]:
 def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, str]:
     """
     Inject a JS XHR interceptor via CDP that captures listugcposts timestamps
-    into window._reviewTimestamps. Compatible with SeleniumBase UC Mode.
+    into window._reviewTimestamps and window._ownerTimestamps.
+    Compatible with SeleniumBase UC Mode.
 
     Call this ONCE immediately after setup_driver(), before any navigation.
     Returns a shared dict that poll_timestamp_responses() will populate.
@@ -339,6 +340,7 @@ def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, str]:
         driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
             'source': '''
                 window._reviewTimestamps = {};
+                window._ownerTimestamps = {};
                 const _origOpen = XMLHttpRequest.prototype.open;
                 XMLHttpRequest.prototype.open = function(method, url) {
                     this._url = url;
@@ -354,10 +356,19 @@ def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, str]:
                                         const inner = r[0];
                                         if (!inner) return;
                                         const rid = inner[0];
+
+                                        // Review timestamp: inner[1][2] (microseconds)
                                         const ts = inner[1] && inner[1][2];
                                         if (rid && ts) {
                                             const d = new Date(ts / 1000);
                                             window._reviewTimestamps[rid] = d.toISOString().split('T')[0];
+                                        }
+
+                                        // Owner response timestamp: r[2][1] (microseconds)
+                                        if (rid && r[2] && r[2][1]) {
+                                            const ots = r[2][1];
+                                            const od = new Date(ots / 1000);
+                                            window._ownerTimestamps[rid] = od.toISOString().split('T')[0];
                                         }
                                     } catch(e) {}
                                 });
@@ -372,7 +383,6 @@ def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, str]:
     except Exception as e:
         log.warning(f"Could not inject JS timestamp interceptor: {e}")
     return ts_cache
-
 
 # ---------------------------------------------------------------------------
 # Existing helper utilities (unchanged)
@@ -426,10 +436,12 @@ def get_current_iso_date() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def poll_timestamp_responses(driver: Chrome, ts_cache: Dict[str, str]) -> None:
+def poll_timestamp_responses(driver: Chrome, ts_cache: Dict[str, str],
+                             owner_cache: Dict[str, str] = None) -> None:
     """
     Read timestamps captured by the JS interceptor from window._reviewTimestamps
-    into ts_cache. Call this inside the scroll loop on each iteration.
+    and window._ownerTimestamps into the respective caches.
+    Call this inside the scroll loop on each iteration.
     """
     try:
         data = driver.execute_script("return window._reviewTimestamps || {};")
@@ -437,6 +449,17 @@ def poll_timestamp_responses(driver: Chrome, ts_cache: Dict[str, str]) -> None:
             new = {k: v for k, v in data.items() if k not in ts_cache}
             if new:
                 ts_cache.update(new)
-                log.debug(f"JS poll: {len(new)} new timestamps, total {len(ts_cache)}")
+                log.debug(f"JS poll: {len(new)} new review timestamps, total {len(ts_cache)}")
     except Exception as e:
         log.debug(f"JS poll error: {e}")
+
+    if owner_cache is not None:
+        try:
+            data = driver.execute_script("return window._ownerTimestamps || {};")
+            if data:
+                new = {k: v for k, v in data.items() if k not in owner_cache}
+                if new:
+                    owner_cache.update(new)
+                    log.debug(f"JS poll: {len(new)} new owner timestamps, total {len(owner_cache)}")
+        except Exception as e:
+            log.debug(f"JS owner poll error: {e}")

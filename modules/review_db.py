@@ -907,8 +907,16 @@ class ReviewDB:
         """Patch review_date for a single review if a better timestamp arrived late."""
         self.backend.execute(
             """UPDATE reviews SET review_date = ?
-               WHERE place_id = ? AND review_id = ?
-               AND (review_date IS NULL OR review_date = '')""",
+               WHERE place_id = ? AND review_id = ?""",
+            (date_str, place_id, review_id)
+        )
+        self.backend.commit()
+    
+    def update_owner_date(self, place_id: str, review_id: str, date_str: str) -> None:
+        """Patch owner_response_date with exact timestamp from owner_cache."""
+        self.backend.execute(
+            """UPDATE reviews SET owner_response_date = ?
+            WHERE place_id = ? AND review_id = ?""",
             (date_str, place_id, review_id)
         )
         self.backend.commit()
