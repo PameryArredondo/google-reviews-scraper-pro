@@ -9,7 +9,7 @@ max_reviews: 0
 max_scroll_attempts: 50
 preserve_original_urls: true
 scrape_mode: update
-scroll_idle_limit: 10
+scroll_idle_limit: 15
 sort_by: newest
 stop_threshold: 3
 store_local_paths: false
