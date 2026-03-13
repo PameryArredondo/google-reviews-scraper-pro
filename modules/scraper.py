@@ -1452,20 +1452,23 @@ class GoogleReviewsScraper:
                                 continue
 
                         api = ts_cache.get(raw.id) or {}
+                        api_owner_text = (api.get("ownerReplyText") or "").strip()
+                        api_owner_date = (api.get("ownerReplyDate") or "").strip()
+
                         review_dict = {
-                            "review_id":  raw.id,
-                            "text":       api.get("reviewText")      or raw.text,
-                            "rating":     api.get("rating")          or raw.rating,
-                            "likes":      raw.likes,
-                            "lang":       raw.lang,
-                            "date":       raw.date,
-                            "review_date": api.get("reviewDate")     or raw.review_date,
-                            "author":     raw.author,
-                            "profile":    raw.profile,
-                            "avatar":     raw.avatar,
-                            "owner_text": api.get("ownerReplyText")  or raw.owner_text,
-                            "owner_date": api.get("ownerReplyDate")  or raw.owner_date,
-                            "photos":     raw.photos,
+                            "review_id":   raw.id,
+                            "text":        api.get("reviewText")   or raw.text,
+                            "rating":      api.get("rating")       or raw.rating,
+                            "likes":       raw.likes,
+                            "lang":        raw.lang,
+                            "date":        raw.date,
+                            "review_date": api.get("reviewDate")   or raw.review_date,
+                            "author":      raw.author,
+                            "profile":     raw.profile,
+                            "avatar":      raw.avatar,
+                            "owner_text":  api_owner_text if api_owner_text else raw.owner_text,
+                            "owner_date":  api_owner_date if api_owner_date else raw.owner_date,
+                            "photos":      raw.photos,
                         }
 
                         result = self.review_db.upsert_review(
@@ -1491,10 +1494,10 @@ class GoogleReviewsScraper:
                     poll_timestamp_responses(driver, ts_cache)
                     for rid in list(processed_ids):
                         api = ts_cache.get(rid) or {}
-                    if api.get("reviewDate"):
-                        self.review_db.update_review_date(place_id, rid, api["reviewDate"])
-                    if api.get("ownerReplyDate"):
-                        self.review_db.update_owner_date(place_id, rid, api["ownerReplyDate"])
+                        if api.get("reviewDate"):
+                            self.review_db.update_review_date(place_id, rid, api["reviewDate"])
+                        if api.get("ownerReplyDate"):
+                            self.review_db.update_owner_date(place_id, rid, api["ownerReplyDate"])
                             
                     # Batch-level stop: entire scroll iteration was unchanged.
                     # Require min 3 reviews in the batch to avoid false stops
