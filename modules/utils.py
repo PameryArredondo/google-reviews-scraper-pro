@@ -429,7 +429,12 @@ def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, Any]:
                                     let reviewDate = null;
                                     try {
                                         const ts = inner[1] && inner[1][2];
-                                        if (ts) reviewDate = new Date(ts / 1000).toISOString().split('T')[0];
+                                        if (ts) {
+                                            const d = new Date(ts / 1000);
+                                            const m   = String(d.getMonth()+1).padStart(2,'0');
+                                            const day = String(d.getDate()).padStart(2,'0');
+                                            reviewDate = `${d.getFullYear()}-${m}-${day}`;
+                                        }
                                     } catch(e) {}
 
                                     // Rating: r[0][2][0][0]
@@ -446,8 +451,29 @@ def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, Any]:
                                     try {
                                         const rb = inner[3];
                                         if (rb) {
-                                            if (rb[1]) ownerReplyDate = new Date(rb[1] / 1000).toISOString().split('T')[0];
-                                            try { ownerReplyText = rb[13][0][0] || ""; } catch(e) {}
+                                            // Owner reply date
+                                            if (rb[1]) {
+                                                const od   = new Date(rb[1] / 1000);
+                                                const om   = String(od.getMonth()+1).padStart(2,'0');
+                                                const oday = String(od.getDate()).padStart(2,'0');
+                                                ownerReplyDate = `${od.getFullYear()}-${om}-${oday}`;
+                                            }
+
+                                            // Owner reply text — debug all candidate indices
+                                            try {
+                                                ownerReplyText = rb[13][0][0] || "";
+                                            } catch(e) {
+                                                // rb[13] failed — log full rb to find correct index
+                                                window._ownerDebug['text_err_' + rid] = (
+                                                    'rb[13] failed: ' + String(e) +
+                                                    ' | rb length: ' + (rb ? rb.length : 'null') +
+                                                    ' | rb keys with values: ' + 
+                                                    Object.entries(rb)
+                                                        .filter(([k,v]) => v !== null && v !== undefined)
+                                                        .map(([k,v]) => k + '=' + JSON.stringify(v).substring(0, 60))
+                                                        .join(', ')
+                                                );
+                                            }
                                         }
                                     } catch(e) {}
 
@@ -461,7 +487,7 @@ def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, Any]:
 
                                     // Debug: keep r[0][3] snapshot for first 20
                                     if (Object.keys(window._ownerDebug).length < 20) {
-                                        window._ownerDebug[rid] = JSON.stringify(inner[3]).substring(0, 200);
+                                        window._ownerDebug[rid] = JSON.stringify(inner[3]).substring(0, 300);
                                     }
 
                                 } catch(e) {
@@ -478,7 +504,6 @@ def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, Any]:
     except Exception as e:
         log.warning(f"Could not inject JS review data interceptor: {e}")
     return ts_cache
-
 
 # ---------------------------------------------------------------------------
 # Existing helper utilities (unchanged)
