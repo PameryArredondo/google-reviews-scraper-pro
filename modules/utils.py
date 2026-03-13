@@ -415,6 +415,15 @@ def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, Any]:
                 window._reviewData = {};
                 window._ownerDebug = {};
 
+                const toEastern = (ts) => {
+                    const d = new Date(ts / 1000);
+                    const eastern = new Date(d.toLocaleString('en-US', {timeZone: 'America/New_York'}));
+                    const y = eastern.getFullYear();
+                    const m = String(eastern.getMonth()+1).padStart(2,'0');
+                    const day = String(eastern.getDate()).padStart(2,'0');
+                    return `${y}-${m}-${day}`;
+                };
+
                 const _origOpen = XMLHttpRequest.prototype.open;
                 XMLHttpRequest.prototype.open = function(method, url) {
                     this._url = url;
@@ -437,15 +446,7 @@ def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, Any]:
                                     let reviewDate = null;
                                     try {
                                         const ts = inner[1] && inner[1][2];
-                                        if (ts) {
-                                            const d = new Date(ts / 1000);
-                                            reviewDate = d.toLocaleDateString('en-CA', {
-                                                timeZone: 'America/New_York',
-                                                year: 'numeric',
-                                                month: '2-digit',
-                                                day: '2-digit'
-                                            });
-                                        }
+                                        if (ts) reviewDate = toEastern(ts);
                                     } catch(e) {}
 
                                     // Rating: r[0][2][0][0]
@@ -464,15 +465,7 @@ def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, Any]:
                                         if (rb) {
                                             // Owner reply date: rb[1] (microseconds)
                                             try {
-                                                if (rb[1]) {
-                                                    const od = new Date(rb[1] / 1000);
-                                                    ownerReplyDate = od.toLocaleDateString('en-CA', {
-                                                        timeZone: 'America/New_York',
-                                                        year: 'numeric',
-                                                        month: '2-digit',
-                                                        day: '2-digit'
-                                                    });
-                                                }
+                                                if (rb[1]) ownerReplyDate = toEastern(rb[1]);
                                             } catch(e) {}
 
                                             // Owner reply text: scan indices 6-18
