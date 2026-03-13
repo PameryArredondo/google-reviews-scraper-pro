@@ -11,7 +11,7 @@ preserve_original_urls: true
 scrape_mode: update
 scroll_idle_limit: 15
 sort_by: newest
-stop_threshold: 3
+stop_threshold: 0
 store_local_paths: false
 use_mongodb: false
 businesses:
