@@ -1451,22 +1451,22 @@ class GoogleReviewsScraper:
                             except StaleElementReferenceException:
                                 continue
 
-                     api = ts_cache.get(raw.id) or {}
-                     review_dict = {
-                          "review_id":  raw.id,
-                          "text":       api.get("reviewText")      or raw.text,
-                          "rating":     api.get("rating")          or raw.rating,
-                          "likes":      raw.likes,
-                          "lang":       raw.lang,
-                          "date":       raw.date,
-                          "review_date": api.get("reviewDate")     or raw.review_date,
-                          "author":     raw.author,
-                          "profile":    raw.profile,
-                          "avatar":     raw.avatar,
-                          "owner_text": api.get("ownerReplyText")  or raw.owner_text,
-                          "owner_date": api.get("ownerReplyDate")  or raw.owner_date,
-                          "photos":     raw.photos,
-                      }
+                        api = ts_cache.get(raw.id) or {}
+                        review_dict = {
+                            "review_id":  raw.id,
+                            "text":       api.get("reviewText")      or raw.text,
+                            "rating":     api.get("rating")          or raw.rating,
+                            "likes":      raw.likes,
+                            "lang":       raw.lang,
+                            "date":       raw.date,
+                            "review_date": api.get("reviewDate")     or raw.review_date,
+                            "author":     raw.author,
+                            "profile":    raw.profile,
+                            "avatar":     raw.avatar,
+                            "owner_text": api.get("ownerReplyText")  or raw.owner_text,
+                            "owner_date": api.get("ownerReplyDate")  or raw.owner_date,
+                            "photos":     raw.photos,
+                        }
 
                         result = self.review_db.upsert_review(
                             place_id, review_dict, session_id,
