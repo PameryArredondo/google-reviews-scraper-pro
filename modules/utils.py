@@ -286,20 +286,27 @@ def _compute_date(now: datetime, unit: str, amount: int) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Exact timestamp extraction via CDP network interception
+# Exact timestamp + full review data extraction via CDP network interception
 # ---------------------------------------------------------------------------
 
-def _parse_listugcposts(response_text: str) -> Dict[str, str]:
+def _parse_listugcposts(response_text: str) -> Dict[str, Any]:
     """
     Parse a raw listugcposts API response and return a dict mapping
-    review_id -> exact ISO date string (YYYY-MM-DD).
+    review_id -> dict with all available fields.
 
-    The response is a XSSI-protected JSON array:
-      parsed[2] = list of reviews
-      each review: r[0][1][2] = microsecond timestamp (16-digit int)
-                   r[0][0]    = review ID string (matches data-review-id in DOM)
+    Confirmed structure (from browser debug):
+      parsed[2]             = list of review entries
+      each entry:
+        r[0]                = review object
+        r[0][0]             = review ID string (matches data-review-id in DOM)
+        r[0][1][2]          = review timestamp (microseconds since epoch)
+        r[0][2][0][0]       = star rating (int)
+        r[0][2][15][0][0]   = review text
+        r[0][3]             = owner reply block (may be None)
+        r[0][3][1]          = owner reply timestamp (microseconds since epoch)
+        r[0][3][13][0][0]   = owner reply text
     """
-    result: Dict[str, str] = {}
+    result: Dict[str, Any] = {}
     try:
         clean = response_text.lstrip(")]}'\n")
         parsed = json.loads(clean)
@@ -311,14 +318,62 @@ def _parse_listugcposts(response_text: str) -> Dict[str, str]:
                 inner = r[0]
                 if not inner:
                     continue
-                review_id = inner[0]          # data-review-id value
-                place_data = inner[1]
-                if not place_data or not review_id:
+                review_id = inner[0]
+                if not review_id:
                     continue
-                ts_us = place_data[2]         # microseconds since epoch
-                if ts_us:
-                    dt = datetime.fromtimestamp(ts_us / 1_000_000, tz=timezone.utc)
-                    result[review_id] = dt.date().isoformat()
+
+                # Review timestamp
+                review_date = ""
+                try:
+                    ts_us = inner[1][2]
+                    if ts_us:
+                        dt = datetime.fromtimestamp(ts_us / 1_000_000, tz=timezone.utc)
+                        review_date = dt.date().isoformat()
+                except (TypeError, IndexError):
+                    pass
+
+                # Rating
+                rating = None
+                try:
+                    rating = inner[2][0][0]
+                except (TypeError, IndexError):
+                    pass
+
+                # Review text
+                review_text = ""
+                try:
+                    review_text = inner[2][15][0][0] or ""
+                except (TypeError, IndexError):
+                    pass
+
+                # Owner reply block
+                owner_reply_text = ""
+                owner_reply_date = ""
+                try:
+                    reply_block = inner[3]
+                    if reply_block:
+                        try:
+                            ots = reply_block[1]
+                            if ots:
+                                od = datetime.fromtimestamp(ots / 1_000_000, tz=timezone.utc)
+                                owner_reply_date = od.date().isoformat()
+                        except (TypeError, IndexError):
+                            pass
+                        try:
+                            owner_reply_text = reply_block[13][0][0] or ""
+                        except (TypeError, IndexError):
+                            pass
+                except (TypeError, IndexError):
+                    pass
+
+                result[review_id] = {
+                    "review_date":      review_date,
+                    "rating":           rating,
+                    "review_text":      review_text,
+                    "owner_reply_text": owner_reply_text,
+                    "owner_reply_date": owner_reply_date,
+                }
+
             except Exception as e:
                 log.debug(f"Error parsing individual review in listugcposts: {e}")
     except Exception as e:
@@ -326,63 +381,104 @@ def _parse_listugcposts(response_text: str) -> Dict[str, str]:
     return result
 
 
-def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, str]:
+def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, Any]:
     """
-    Inject a JS XHR interceptor via CDP that captures listugcposts timestamps
-    into window._reviewTimestamps and window._ownerTimestamps.
+    Inject a JS XHR interceptor via CDP that captures all review fields
+    from listugcposts into window._reviewData as a combined object per review ID.
     Compatible with SeleniumBase UC Mode.
 
     Call this ONCE immediately after setup_driver(), before any navigation.
     Returns a shared dict that poll_timestamp_responses() will populate.
+
+    Confirmed structure (from browser debug):
+      r[0]                = review object
+      r[0][0]             = review ID
+      r[0][1][2]          = review timestamp (microseconds)
+      r[0][2][0][0]       = star rating
+      r[0][2][15][0][0]   = review text
+      r[0][3]             = owner reply block (may be null)
+      r[0][3][1]          = owner reply timestamp (microseconds)
+      r[0][3][13][0][0]   = owner reply text
     """
-    ts_cache: Dict[str, str] = {}
+    ts_cache: Dict[str, Any] = {}
     try:
         driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
             'source': '''
-                window._reviewTimestamps = {};
-                window._ownerTimestamps = {};
+                window._reviewData = {};
+                window._ownerDebug = {};
+
                 const _origOpen = XMLHttpRequest.prototype.open;
                 XMLHttpRequest.prototype.open = function(method, url) {
                     this._url = url;
                     this.addEventListener('load', function() {
-                        if (this._url && this._url.includes('listugcposts')) {
-                            try {
-                                const clean = this.responseText.replace(/^\\)\\]\\}'\\n/, '');
-                                const parsed = JSON.parse(clean);
-                                const reviews = parsed[2];
-                                if (!reviews) return;
-                                reviews.forEach(r => {
+                        if (!this._url || !this._url.includes('listugcposts')) return;
+                        try {
+                            const clean   = this.responseText.replace(/^\\)\\]\\}'\\n/, '');
+                            const parsed  = JSON.parse(clean);
+                            const reviews = parsed[2];
+                            if (!reviews) return;
+
+                            reviews.forEach(r => {
+                                try {
+                                    const inner = r[0];
+                                    if (!inner) return;
+                                    const rid = inner[0];
+                                    if (!rid) return;
+
+                                    // Review timestamp: r[0][1][2] (microseconds)
+                                    let reviewDate = null;
                                     try {
-                                        const inner = r[0];
-                                        if (!inner) return;
-                                        const rid = inner[0];
-
-                                        // Review timestamp: inner[1][2] (microseconds)
                                         const ts = inner[1] && inner[1][2];
-                                        if (rid && ts) {
-                                            const d = new Date(ts / 1000);
-                                            window._reviewTimestamps[rid] = d.toISOString().split('T')[0];
-                                        }
+                                        if (ts) reviewDate = new Date(ts / 1000).toISOString().split('T')[0];
+                                    } catch(e) {}
 
-                                        // Owner response timestamp: r[2][1] (microseconds)
-                                        if (rid && r[2] && r[2][1]) {
-                                            const ots = r[2][1];
-                                            const od = new Date(ots / 1000);
-                                            window._ownerTimestamps[rid] = od.toISOString().split('T')[0];
+                                    // Rating: r[0][2][0][0]
+                                    let rating = null;
+                                    try { rating = inner[2][0][0]; } catch(e) {}
+
+                                    // Review text: r[0][2][15][0][0]
+                                    let reviewText = "";
+                                    try { reviewText = inner[2][15][0][0] || ""; } catch(e) {}
+
+                                    // Owner reply block: r[0][3]
+                                    let ownerReplyDate = null;
+                                    let ownerReplyText = "";
+                                    try {
+                                        const rb = inner[3];
+                                        if (rb) {
+                                            if (rb[1]) ownerReplyDate = new Date(rb[1] / 1000).toISOString().split('T')[0];
+                                            try { ownerReplyText = rb[13][0][0] || ""; } catch(e) {}
                                         }
                                     } catch(e) {}
-                                });
-                            } catch(e) {}
-                        }
+
+                                    window._reviewData[rid] = {
+                                        reviewDate,
+                                        rating,
+                                        reviewText,
+                                        ownerReplyText,
+                                        ownerReplyDate,
+                                    };
+
+                                    // Debug: keep r[0][3] snapshot for first 20
+                                    if (Object.keys(window._ownerDebug).length < 20) {
+                                        window._ownerDebug[rid] = JSON.stringify(inner[3]).substring(0, 200);
+                                    }
+
+                                } catch(e) {
+                                    window._ownerDebug['ERROR_' + Math.random()] = String(e);
+                                }
+                            });
+                        } catch(e) {}
                     });
                     return _origOpen.apply(this, arguments);
                 };
             '''
         })
-        log.info("JS timestamp interceptor injected")
+        log.info("JS review data interceptor injected")
     except Exception as e:
-        log.warning(f"Could not inject JS timestamp interceptor: {e}")
+        log.warning(f"Could not inject JS review data interceptor: {e}")
     return ts_cache
+
 
 # ---------------------------------------------------------------------------
 # Existing helper utilities (unchanged)
@@ -436,30 +532,35 @@ def get_current_iso_date() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def poll_timestamp_responses(driver: Chrome, ts_cache: Dict[str, str],
-                             owner_cache: Dict[str, str] = None) -> None:
+def poll_timestamp_responses(driver: Chrome, ts_cache: Dict[str, Any],
+                             owner_cache: Dict[str, Any] = None) -> None:
     """
-    Read timestamps captured by the JS interceptor from window._reviewTimestamps
-    and window._ownerTimestamps into the respective caches.
+    Read all review data captured by the JS interceptor from window._reviewData
+    into ts_cache. Each entry is a dict with keys:
+        reviewDate, rating, reviewText, ownerReplyText, ownerReplyDate
+
+    The owner_cache parameter is kept for backwards compatibility but is no
+    longer needed — all data including owner reply fields flows into ts_cache.
+
     Call this inside the scroll loop on each iteration.
     """
     try:
-        data = driver.execute_script("return window._reviewTimestamps || {};")
+        data = driver.execute_script("return window._reviewData || {};")
         if data:
             new = {k: v for k, v in data.items() if k not in ts_cache}
             if new:
                 ts_cache.update(new)
-                log.debug(f"JS poll: {len(new)} new review timestamps, total {len(ts_cache)}")
+                log.debug(f"JS poll: {len(new)} new reviews captured, total {len(ts_cache)}")
     except Exception as e:
         log.debug(f"JS poll error: {e}")
 
-    if owner_cache is not None:
-        try:
-            data = driver.execute_script("return window._ownerTimestamps || {};")
-            if data:
-                new = {k: v for k, v in data.items() if k not in owner_cache}
-                if new:
-                    owner_cache.update(new)
-                    log.debug(f"JS poll: {len(new)} new owner timestamps, total {len(owner_cache)}")
-        except Exception as e:
-            log.debug(f"JS owner poll error: {e}")
+    # Debug: log r[0][3] snapshots to verify owner reply extraction
+    try:
+        debug = driver.execute_script("return window._ownerDebug || {};")
+        if debug:
+            log.info(f"DEBUG ownerDebug size: {len(debug)}")
+            for rid, val in list(debug.items())[:5]:
+                log.info(f"DEBUG r[0][3] for {rid}: {val}")
+            driver.execute_script("window._ownerDebug = {};")
+    except Exception as e:
+        log.debug(f"JS owner debug error: {e}")
