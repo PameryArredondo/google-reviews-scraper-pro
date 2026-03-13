@@ -1439,6 +1439,10 @@ class GoogleReviewsScraper:
                     for card in fresh_cards:
                         try:
                             raw = RawReview.from_card(card)
+                            # Give XHR interceptor time to catch up if review not in cache yet
+                            if raw.id not in ts_cache:
+                                time.sleep(0.5)
+                                poll_timestamp_responses(driver, ts_cache)
                             log.info(f"ts_cache size: {len(ts_cache)}, lookup for {raw.id}: {(ts_cache.get(raw.id) or {}).get('reviewDate')}")
                         except StaleElementReferenceException:
                             continue
