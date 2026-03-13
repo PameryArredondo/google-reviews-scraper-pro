@@ -27,7 +27,7 @@ DEFAULT_CONFIG = {
     "overwrite_existing": False,
     "max_reviews": 0,
     "max_scroll_attempts": 50,
-    "scroll_idle_limit": 15,
+    "scroll_idle_limit": 5,
     "use_mongodb": True,
     "mongodb": {
         "uri": "mongodb://localhost:27017",
