@@ -1264,7 +1264,6 @@ class GoogleReviewsScraper:
         try:
             driver = self.setup_driver(headless)
             ts_cache = attach_timestamp_interceptor(driver)
-            owner_cache: Dict[str, str] = {}
             wait = WebDriverWait(driver, 20)  # Reduced from 40 to 20 for faster timeout
 
             # Navigate using limited-view bypass (search-based navigation)
@@ -1391,7 +1390,7 @@ class GoogleReviewsScraper:
                     log.info("Scrape cancelled by user request")
                     raise InterruptedError("Scrape cancelled")
                   
-                poll_timestamp_responses(driver, ts_cache,owner_cache)
+                poll_timestamp_responses(driver, ts_cache)
               
                 try:
                     cards = pane.find_elements(By.CSS_SELECTOR, CARD_SEL)
@@ -1440,7 +1439,7 @@ class GoogleReviewsScraper:
                     for card in fresh_cards:
                         try:
                             raw = RawReview.from_card(card)
-                            log.info(f"ts_cache size: {len(ts_cache)}, lookup for {raw.id}: {ts_cache.get(raw.id)}")
+                            log.info(f"ts_cache size: {len(ts_cache)}, lookup for {raw.id}: {(ts_cache.get(raw.id) or {}).get('reviewDate')}")
                         except StaleElementReferenceException:
                             continue
                         except Exception:
@@ -1452,21 +1451,22 @@ class GoogleReviewsScraper:
                             except StaleElementReferenceException:
                                 continue
 
-                        review_dict = {
-                            "review_id": raw.id,
-                            "text": raw.text,
-                            "rating": raw.rating,
-                            "likes": raw.likes,
-                            "lang": raw.lang,
-                            "date": raw.date,
-                            "review_date": ts_cache.get(raw.id) or raw.review_date,
-                            "author": raw.author,
-                            "profile": raw.profile,
-                            "avatar": raw.avatar,
-                            "owner_text": raw.owner_text,
-                            "owner_date": owner_cache.get(raw.id) or raw.owner_date,
-                            "photos": raw.photos,
-                        }
+                     api = ts_cache.get(raw.id) or {}
+                     review_dict = {
+                          "review_id":  raw.id,
+                          "text":       api.get("reviewText")      or raw.text,
+                          "rating":     api.get("rating")          or raw.rating,
+                          "likes":      raw.likes,
+                          "lang":       raw.lang,
+                          "date":       raw.date,
+                          "review_date": api.get("reviewDate")     or raw.review_date,
+                          "author":     raw.author,
+                          "profile":    raw.profile,
+                          "avatar":     raw.avatar,
+                          "owner_text": api.get("ownerReplyText")  or raw.owner_text,
+                          "owner_date": api.get("ownerReplyDate")  or raw.owner_date,
+                          "photos":     raw.photos,
+                      }
 
                         result = self.review_db.upsert_review(
                             place_id, review_dict, session_id,
@@ -1488,12 +1488,13 @@ class GoogleReviewsScraper:
                             break
                     
                     # ── late-arriving timestamp patch ──────────────────────
-                    poll_timestamp_responses(driver, ts_cache, owner_cache)
+                    poll_timestamp_responses(driver, ts_cache)
                     for rid in list(processed_ids):
-                        if rid in ts_cache:
-                            self.review_db.update_review_date(place_id, rid, ts_cache[rid])
-                        if rid in owner_cache:
-                            self.review_db.update_owner_date(place_id, rid, owner_cache[rid])
+                        api = ts_cache.get(rid) or {}
+                    if api.get("reviewDate"):
+                        self.review_db.update_review_date(place_id, rid, api["reviewDate"])
+                    if api.get("ownerReplyDate"):
+                        self.review_db.update_owner_date(place_id, rid, api["ownerReplyDate"])
                             
                     # Batch-level stop: entire scroll iteration was unchanged.
                     # Require min 3 reviews in the batch to avoid false stops
