@@ -8,6 +8,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import List, Dict, Any
+from zoneinfo import ZoneInfo
+
 
 from selenium.common.exceptions import (NoSuchElementException,
                                         StaleElementReferenceException,
@@ -24,7 +26,7 @@ log = logging.getLogger("scraper")
 # Constants for language detection
 HEB_CHARS = re.compile(r"[\u0590-\u05FF]")
 THAI_CHARS = re.compile(r"[\u0E00-\u0E7F]")
-
+_EASTERN = ZoneInfo("America/New_York")
 
 @lru_cache(maxsize=1024)
 def detect_lang(txt: str) -> str:
@@ -249,7 +251,7 @@ def parse_date_to_iso(date_str: str) -> str:
         return ""
 
     try:
-        now = datetime.now(timezone.utc).replace(microsecond=0)
+        now = datetime.now(_EASTERN).replace(microsecond=0)
         text = date_str.lower()
 
         # Check dual forms first (Arabic/Hebrew "two years" as single word)
@@ -282,7 +284,7 @@ def _compute_date(now: datetime, unit: str, amount: int) -> str:
         "year":   timedelta(days=365 * amount),
     }
     dt = now - deltas.get(unit, timedelta())
-    return dt.isoformat()
+    return dt.astimezone(_EASTERN).date().isoformat()
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +306,7 @@ def _parse_listugcposts(response_text: str) -> Dict[str, Any]:
         r[0][2][15][0][0]   = review text
         r[0][3]             = owner reply block (may be None)
         r[0][3][1]          = owner reply timestamp (microseconds since epoch)
-        r[0][3][13][0][0]   = owner reply text
+        r[0][3][6-18][0][0] = owner reply text (index varies)
     """
     result: Dict[str, Any] = {}
     try:
@@ -327,7 +329,7 @@ def _parse_listugcposts(response_text: str) -> Dict[str, Any]:
                 try:
                     ts_us = inner[1][2]
                     if ts_us:
-                        dt = datetime.fromtimestamp(ts_us / 1_000_000, tz=timezone.utc)
+                        dt = datetime.fromtimestamp(ts_us / 1_000_000, tz=_EASTERN)
                         review_date = dt.date().isoformat()
                 except (TypeError, IndexError):
                     pass
@@ -352,17 +354,23 @@ def _parse_listugcposts(response_text: str) -> Dict[str, Any]:
                 try:
                     reply_block = inner[3]
                     if reply_block:
+                        # Owner reply date: rb[1] (microseconds)
                         try:
                             ots = reply_block[1]
                             if ots:
-                                od = datetime.fromtimestamp(ots / 1_000_000, tz=timezone.utc)
+                                od = datetime.fromtimestamp(ots / 1_000_000, tz=_EASTERN)
                                 owner_reply_date = od.date().isoformat()
                         except (TypeError, IndexError):
                             pass
-                        try:
-                            owner_reply_text = reply_block[13][0][0] or ""
-                        except (TypeError, IndexError):
-                            pass
+                        # Owner reply text: scan indices 6-18 for first non-empty string
+                        for i in range(6, 19):
+                            try:
+                                val = reply_block[i][0][0]
+                                if val and isinstance(val, str) and len(val) > 2:
+                                    owner_reply_text = val
+                                    break
+                            except (TypeError, IndexError):
+                                continue
                 except (TypeError, IndexError):
                     pass
 
@@ -398,7 +406,7 @@ def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, Any]:
       r[0][2][15][0][0]   = review text
       r[0][3]             = owner reply block (may be null)
       r[0][3][1]          = owner reply timestamp (microseconds)
-      r[0][3][13][0][0]   = owner reply text
+      r[0][3][6-18][0][0] = owner reply text (index varies by review)
     """
     ts_cache: Dict[str, Any] = {}
     try:
@@ -451,28 +459,25 @@ def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, Any]:
                                     try {
                                         const rb = inner[3];
                                         if (rb) {
-                                            // Owner reply date
-                                            if (rb[1]) {
-                                                const od   = new Date(rb[1] / 1000);
-                                                const om   = String(od.getMonth()+1).padStart(2,'0');
-                                                const oday = String(od.getDate()).padStart(2,'0');
-                                                ownerReplyDate = `${od.getFullYear()}-${om}-${oday}`;
-                                            }
-
-                                            // Owner reply text — debug all candidate indices
+                                            // Owner reply date: rb[1] (microseconds)
                                             try {
-                                                ownerReplyText = rb[13][0][0] || "";
-                                            } catch(e) {
-                                                // rb[13] failed — log full rb to find correct index
-                                                window._ownerDebug['text_err_' + rid] = (
-                                                    'rb[13] failed: ' + String(e) +
-                                                    ' | rb length: ' + (rb ? rb.length : 'null') +
-                                                    ' | rb keys with values: ' + 
-                                                    Object.entries(rb)
-                                                        .filter(([k,v]) => v !== null && v !== undefined)
-                                                        .map(([k,v]) => k + '=' + JSON.stringify(v).substring(0, 60))
-                                                        .join(', ')
-                                                );
+                                                if (rb[1]) {
+                                                    const od   = new Date(rb[1] / 1000);
+                                                    const om   = String(od.getMonth()+1).padStart(2,'0');
+                                                    const oday = String(od.getDate()).padStart(2,'0');
+                                                    ownerReplyDate = `${od.getFullYear()}-${om}-${oday}`;
+                                                }
+                                            } catch(e) {}
+
+                                            // Owner reply text: scan indices 6-18
+                                            for (let i = 6; i <= 18; i++) {
+                                                try {
+                                                    const val = rb[i] && rb[i][0] && rb[i][0][0];
+                                                    if (val && typeof val === "string" && val.length > 2) {
+                                                        ownerReplyText = val;
+                                                        break;
+                                                    }
+                                                } catch(e) {}
                                             }
                                         }
                                     } catch(e) {}
