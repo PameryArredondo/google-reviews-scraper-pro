@@ -1443,6 +1443,7 @@ class GoogleReviewsScraper:
                             if raw.id not in ts_cache:
                                 time.sleep(0.5)
                                 poll_timestamp_responses(driver, ts_cache)
+                            log.warning(f"⚠⚠⚠ REVIEW {raw.id}: api={ts_cache.get(raw.id)}, raw.review_date={raw.review_date}")
                         except StaleElementReferenceException:
                             continue
                         except Exception:
@@ -1453,7 +1454,6 @@ class GoogleReviewsScraper:
                                 raw = RawReview(id=raw_id, text="", lang="und")
                             except StaleElementReferenceException:
                                 continue
-
                         api = ts_cache.get(raw.id) or {}
                         api_owner_text = (api.get("ownerReplyText") or "").strip()
                         api_owner_date = (api.get("ownerReplyDate") or "").strip()
