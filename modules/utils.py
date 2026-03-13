@@ -439,9 +439,12 @@ def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, Any]:
                                         const ts = inner[1] && inner[1][2];
                                         if (ts) {
                                             const d = new Date(ts / 1000);
-                                            const m   = String(d.getMonth()+1).padStart(2,'0');
-                                            const day = String(d.getDate()).padStart(2,'0');
-                                            reviewDate = `${d.getFullYear()}-${m}-${day}`;
+                                            reviewDate = d.toLocaleDateString('en-CA', {
+                                                timeZone: 'America/New_York',
+                                                year: 'numeric',
+                                                month: '2-digit',
+                                                day: '2-digit'
+                                            });
                                         }
                                     } catch(e) {}
 
@@ -462,10 +465,13 @@ def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, Any]:
                                             // Owner reply date: rb[1] (microseconds)
                                             try {
                                                 if (rb[1]) {
-                                                    const od   = new Date(rb[1] / 1000);
-                                                    const om   = String(od.getMonth()+1).padStart(2,'0');
-                                                    const oday = String(od.getDate()).padStart(2,'0');
-                                                    ownerReplyDate = `${od.getFullYear()}-${om}-${oday}`;
+                                                    const od = new Date(rb[1] / 1000);
+                                                    ownerReplyDate = od.toLocaleDateString('en-CA', {
+                                                        timeZone: 'America/New_York',
+                                                        year: 'numeric',
+                                                        month: '2-digit',
+                                                        day: '2-digit'
+                                                    });
                                                 }
                                             } catch(e) {}
 
