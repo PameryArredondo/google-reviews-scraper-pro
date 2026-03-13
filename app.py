@@ -20,7 +20,8 @@ def to_est_date(utc_str):
     try:
         dt = datetime.fromisoformat(utc_str.replace("Z", "+00:00"))
         if dt.tzinfo is None:
-            dt = pytz.utc.localize(dt)
+            # Already a plain date — no timezone conversion needed
+            return dt.strftime("%d-%b-%Y")
         return dt.astimezone(EST).strftime("%d-%b-%Y")
     except Exception:
         return utc_str
