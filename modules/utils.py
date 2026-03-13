@@ -416,12 +416,7 @@ def attach_timestamp_interceptor(driver: Chrome) -> Dict[str, Any]:
                 window._ownerDebug = {};
 
                 const toEastern = (ts) => {
-                    const d = new Date(ts / 1000);
-                    const eastern = new Date(d.toLocaleString('en-US', {timeZone: 'America/New_York'}));
-                    const y = eastern.getFullYear();
-                    const m = String(eastern.getMonth()+1).padStart(2,'0');
-                    const day = String(eastern.getDate()).padStart(2,'0');
-                    return `${y}-${m}-${day}`;
+                    return new Intl.DateTimeFormat('en-CA', {timeZone: 'America/New_York'}).format(new Date(ts / 1000));
                 };
 
                 const _origOpen = XMLHttpRequest.prototype.open;
