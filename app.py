@@ -274,7 +274,7 @@ try:
             if dt.tzinfo is None:
                 dt = pytz.utc.localize(dt)
             dt_est = dt.astimezone(EST)
-            st.caption(f"📅 Last scraped: {dt_est.strftime('%d/%m/%Y at %I:%M %p')} EST")
+            st.caption(f"📅 Last scraped: {dt_est.strftime('%d %b %Y at %I:%M %p')} EST")
         except Exception:
             st.caption(f"📅 Last scraped: {last_scrape}")
     else:
